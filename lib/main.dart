@@ -1,75 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-void main() => runApp(MyApp());
+void main() => runApp(const MyApp());
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const MaterialApp(
       home: MapScreen(),
     );
   }
 }
 
 class MapScreen extends StatefulWidget {
+  const MapScreen({super.key});
+
   @override
-  _MapScreenState createState() => _MapScreenState();
+  MapScreenState createState() => MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> {
+class MapScreenState extends State<MapScreen> {
   late GoogleMapController mapController;
 
   final LatLng _center = const LatLng(45.521563, -122.677433);
 
-  Set<Marker> _markers = {
-    Marker(
+  final Set<Marker> _markers = {
+    const Marker(
       markerId: MarkerId('1'),
       position: LatLng(45.521563, -122.677433),
       infoWindow: InfoWindow(
-        title: 'My Location',
-        snippet: 'A place in Portland',
+        title: 'Buoy 1',
+        snippet: '',
       ),
     ),
   };
 
   void _onMapCreated(GoogleMapController controller) {
     mapController = controller;
-    mapController.setMapStyle('''
-      [
-        {
-          "elementType": "geometry",
-          "stylers": [
-            {
-              "color": "#242f3e"
-            }
-          ]
-        },
-        {
-          "elementType": "labels.text.stroke",
-          "stylers": [
-            {
-              "color": "#242f3e"
-            }
-          ]
-        },
-        {
-          "elementType": "labels.text.fill",
-          "stylers": [
-            {
-              "color": "#746855"
-            }
-          ]
-        }
-      ]
-    ''');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Buoy App'),
+        title: const Text('Buoy App'),
         backgroundColor: Colors.red[700],
       ),
       body: GoogleMap(
@@ -79,6 +55,8 @@ class _MapScreenState extends State<MapScreen> {
           zoom: 11.0,
         ),
         markers: _markers,
+        mapType: MapType.normal, // Set your desired map type
+        // style: '[]' // Add your JSON style string here if needed
       ),
     );
   }
