@@ -1,62 +1,58 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-void main() => runApp(const MyApp());
+void main() {
+  runApp(MyApp());
+}
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
+class MyApp extends StatelessWidget{
   @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
+  Widget build(BuildContext context){
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primaryColor: Colors.white,
+      ),
       home: MapScreen(),
     );
   }
 }
 
-class MapScreen extends StatefulWidget {
-  const MapScreen({super.key});
-
+class MapScreen extends StatefulWidget{
   @override
-  MapScreenState createState() => MapScreenState();
+  _MapScreenState createState() => _MapScreenState();
 }
 
-class MapScreenState extends State<MapScreen> {
-  late GoogleMapController mapController;
+class _MapScreenState extends State<MapScreen> {
+  static const _initialCameraPosition = CameraPosition(
+    target: LatLng(10.9742,123.9078),
+    zoom: 11.5,
+  );
 
-  final LatLng _center = const LatLng(45.521563, -122.677433);
+  GoogleMapController _googleMapController;
 
-  final Set<Marker> _markers = {
-    const Marker(
-      markerId: MarkerId('1'),
-      position: LatLng(45.521563, -122.677433),
-      infoWindow: InfoWindow(
-        title: 'Buoy 1',
-        snippet: '',
-      ),
-    ),
-  };
-
-  void _onMapCreated(GoogleMapController controller) {
-    mapController = controller;
+  @override
+  void dispose(){
+    _googleMapController.dispose();
+    super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context){
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Buoy App'),
-        backgroundColor: Colors.red[700],
-      ),
       body: GoogleMap(
-        onMapCreated: _onMapCreated,
-        initialCameraPosition: CameraPosition(
-          target: _center,
-          zoom: 11.0,
+        myLocationButtonEnabled: false,
+        zoomControlsEnabled: false,
+        initialCameraPosition: _initialCameraPosition,
+        onMapCreated: (controller) => _googleMapController = controller,
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Theme.of(context).primaryColor,
+        foregroundColor: Colors.black,
+        onPressed: () => _googleMapController.animateCamera(
+          CameraUpdate.newCameraPosition(_initialCameraPosition),
         ),
-        markers: _markers,
-        mapType: MapType.normal, // Set your desired map type
-        // style: '[]' // Add your JSON style string here if needed
+        child: const Icon(Icons.center_focus_strong),
       ),
     );
   }
