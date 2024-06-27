@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/services.dart' show rootBundle;
 
 import 'panel_widget.dart';
+import 'AboutUsScreen.dart';
 
 void main() {
   runApp(MyApp());
@@ -41,6 +42,8 @@ class _MapScreenState extends State<MapScreen> {
       ValueNotifier<double>(16.0);
   final ValueNotifier<bool> _isPanelOpenNotifier = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _isDrawerOpenNotifier = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _isInfoWindowOpenNotifier =
+      ValueNotifier<bool>(false);
   final ScrollController _scrollController = ScrollController();
   final Set<Marker> _markers = {};
 
@@ -50,6 +53,7 @@ class _MapScreenState extends State<MapScreen> {
     _fabPositionNotifier.dispose();
     _isPanelOpenNotifier.dispose();
     _isDrawerOpenNotifier.dispose();
+    _isInfoWindowOpenNotifier.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -109,6 +113,10 @@ class _MapScreenState extends State<MapScreen> {
           markerId: MarkerId('customMarker'),
           position: LatLng(11.083018, 123.931450),
           icon: BitmapDescriptor.fromBytes(markerIcon),
+          onTap: () {
+            _isInfoWindowOpenNotifier.value = true;
+            _panelController.close();
+          },
         ),
       );
     });
@@ -125,6 +133,7 @@ class _MapScreenState extends State<MapScreen> {
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
     final fabHeightClosed = screenHeight - 735;
     final fabHeightOpened = screenHeight - 290;
     final forecastData = generateForecastData();
@@ -135,29 +144,47 @@ class _MapScreenState extends State<MapScreen> {
         child: ListView(
           padding: EdgeInsets.zero,
           children: <Widget>[
-            DrawerHeader(
-              decoration: BoxDecoration(
-                color: Colors.red[700],
-              ),
-              child: Text(
-                'Menu',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
+            Container(
+              height: 123, // Adjust the height here
+              child: DrawerHeader(
+                decoration: BoxDecoration(
+                  color: Colors.red[700],
+                ),
+                child: Text(
+                  'Menu',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                  ),
                 ),
               ),
             ),
             ListTile(
-              leading: Icon(Icons.info),
-              title: Text('About Us'),
+              leading: Icon(Icons.group),
+              title: Text(
+                'About Us',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
               onTap: () {
-                Navigator.pop(context);
-                _isDrawerOpenNotifier.value = false;
+                Navigator.pop(context); // Close the drawer
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => AboutUsScreen()),
+                );
               },
             ),
             ListTile(
               leading: Icon(Icons.feedback),
-              title: Text('Feedback'),
+              title: Text(
+                'Feedback',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 _isDrawerOpenNotifier.value = false;
@@ -170,7 +197,7 @@ class _MapScreenState extends State<MapScreen> {
         children: [
           GoogleMap(
             myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
+            zoomControlsEnabled: true, // Enable zoom controls
             initialCameraPosition: _initialCameraPosition,
             onMapCreated: (controller) => _googleMapController = controller,
             markers: _markers,
@@ -220,6 +247,88 @@ class _MapScreenState extends State<MapScreen> {
                 },
               ),
             ),
+          ),
+          ValueListenableBuilder<bool>(
+            valueListenable: _isInfoWindowOpenNotifier,
+            builder: (context, isInfoWindowOpen, child) {
+              if (isInfoWindowOpen) {
+                return Align(
+                  alignment: Alignment.center,
+                  child: Container(
+                    width: screenWidth * 0.8,
+                    padding: EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 10,
+                          offset: Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Align(
+                          alignment: Alignment.center,
+                          child: Text(
+                            'Buoy\'s Status',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                            height: 8.0), // Space between title and first data
+                        Align(
+                          alignment: Alignment.center,
+                          child: Text('X-axis: 1.23'),
+                        ),
+                        SizedBox(
+                            height: 8.0), // Space between X-axis and Y-axis
+                        Align(
+                          alignment: Alignment.center,
+                          child: Text('Y-axis: 4.56'),
+                        ),
+                        SizedBox(
+                            height: 8.0), // Space between Y-axis and Z-axis
+                        Align(
+                          alignment: Alignment.center,
+                          child: Text('Z-axis: 7.89'),
+                        ),
+                        SizedBox(
+                            height:
+                                8.0), // Space between Z-axis and Tilt Status
+                        Align(
+                          alignment: Alignment.center,
+                          child: Text('Tilt Status: Stable'),
+                        ),
+                        SizedBox(height: 16.0), // Space before the button
+                        Center(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              _isInfoWindowOpenNotifier.value = false;
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red[700],
+                            ),
+                            child: Text(
+                              'Close',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              } else {
+                return SizedBox.shrink();
+              }
+            },
           ),
           ValueListenableBuilder<bool>(
             valueListenable: _isPanelOpenNotifier,

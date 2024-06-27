@@ -63,6 +63,9 @@ flutter:
 
   assets:
     - assets/Rectangle22.png
+    - assets/Ellipse 6.png
+    - assets/Ellipse 7.png
+    - assets/Ellipse 8.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
