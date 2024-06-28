@@ -7,6 +7,7 @@ import 'package:flutter/services.dart' show rootBundle;
 
 import 'panel_widget.dart';
 import 'AboutUsScreen.dart';
+import 'ContactUsScreen.dart';
 
 void main() {
   runApp(MyApp());
@@ -177,9 +178,9 @@ class _MapScreenState extends State<MapScreen> {
               },
             ),
             ListTile(
-              leading: Icon(Icons.feedback),
+              leading: Icon(Icons.support_agent),
               title: Text(
-                'Feedback',
+                'Contact Us',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
@@ -187,7 +188,10 @@ class _MapScreenState extends State<MapScreen> {
               ),
               onTap: () {
                 Navigator.pop(context);
-                _isDrawerOpenNotifier.value = false;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ContactUsScreen()),
+                );
               },
             ),
           ],
@@ -195,9 +199,21 @@ class _MapScreenState extends State<MapScreen> {
       ),
       body: Stack(
         children: [
+          GestureDetector(
+            onPanUpdate: (details) {
+              // Check if the panel is closed or not
+              if (!_isPanelOpenNotifier.value) {
+                _googleMapController.moveCamera(CameraUpdate.scrollBy(
+                  -details.delta.dx,
+                  -details.delta.dy,
+                ));
+              }
+            },
+          ),
           GoogleMap(
             myLocationButtonEnabled: false,
-            zoomControlsEnabled: true, // Enable zoom controls
+            zoomControlsEnabled: false, // Disable zoom controls
+            zoomGesturesEnabled: true, // Enable zoom gestures
             initialCameraPosition: _initialCameraPosition,
             onMapCreated: (controller) => _googleMapController = controller,
             markers: _markers,
@@ -468,7 +484,12 @@ class _MapScreenState extends State<MapScreen> {
                   backgroundColor: Theme.of(context).primaryColor,
                   foregroundColor: Colors.black,
                   onPressed: () => _googleMapController.animateCamera(
-                    CameraUpdate.newCameraPosition(_initialCameraPosition),
+                    CameraUpdate.newCameraPosition(
+                      CameraPosition(
+                        target: LatLng(11.083018, 123.931450),
+                        zoom: 16.5, // Reset zoom level to 16.5
+                      ),
+                    ),
                   ),
                   child: const Icon(Icons.center_focus_strong),
                 ),

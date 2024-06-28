@@ -5,13 +5,6 @@ class AboutUsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'ABOUT THE RESEARCHERS',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
         backgroundColor: Colors.red[700],
         iconTheme: IconThemeData(
           color: Colors.white, // Change the back arrow to white
