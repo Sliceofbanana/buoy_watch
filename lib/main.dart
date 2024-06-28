@@ -8,6 +8,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'panel_widget.dart';
 import 'AboutUsScreen.dart';
 import 'ContactUsScreen.dart';
+import 'splash_screen.dart';
 
 void main() {
   runApp(MyApp());
@@ -21,7 +22,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primaryColor: Colors.white,
       ),
-      home: MapScreen(),
+      home: SplashScreen(),
     );
   }
 }
@@ -40,7 +41,7 @@ class _MapScreenState extends State<MapScreen> {
   late GoogleMapController _googleMapController;
   final PanelController _panelController = PanelController();
   final ValueNotifier<double> _fabPositionNotifier =
-      ValueNotifier<double>(16.0);
+      ValueNotifier<double>(150.0);
   final ValueNotifier<bool> _isPanelOpenNotifier = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _isDrawerOpenNotifier = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _isInfoWindowOpenNotifier =
@@ -135,8 +136,6 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
-    final fabHeightClosed = screenHeight - 735;
-    final fabHeightOpened = screenHeight - 290;
     final forecastData = generateForecastData();
     final currentHour = DateTime.now().hour;
 
@@ -229,6 +228,10 @@ class _MapScreenState extends State<MapScreen> {
             margin: EdgeInsets.only(
                 bottom: 98), // Adjust margin to make space for the button
             onPanelSlide: (position) {
+              double fabHeightClosed =
+                  screenHeight - 735; // Adjusted for initial state
+              double fabHeightOpened =
+                  screenHeight - 290; // Adjusted for opened state
               _fabPositionNotifier.value = fabHeightClosed -
                   ((fabHeightClosed - fabHeightOpened) * position);
               _isPanelOpenNotifier.value = position > 0.1;

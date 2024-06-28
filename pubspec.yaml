@@ -67,6 +67,7 @@ flutter:
     - assets/Ellipse 7.png
     - assets/Ellipse 8.png
     - assets/Group 21.png
+    - assets/buoy.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
