@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:sliding_up_panel/sliding_up_panel.dart';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart' show rootBundle;
-
+import 'dart:typed_data';
+import 'dart:async';
 import 'panel_widget.dart';
 import 'AboutUsScreen.dart';
 import 'ContactUsScreen.dart';
@@ -41,13 +41,14 @@ class _MapScreenState extends State<MapScreen> {
   late GoogleMapController _googleMapController;
   final PanelController _panelController = PanelController();
   final ValueNotifier<double> _fabPositionNotifier =
-      ValueNotifier<double>(150.0);
+      ValueNotifier<double>(233.0);
   final ValueNotifier<bool> _isPanelOpenNotifier = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _isDrawerOpenNotifier = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _isInfoWindowOpenNotifier =
       ValueNotifier<bool>(false);
   final ScrollController _scrollController = ScrollController();
   final Set<Marker> _markers = {};
+  Timer? _timer;
 
   @override
   void dispose() {
@@ -57,32 +58,48 @@ class _MapScreenState extends State<MapScreen> {
     _isDrawerOpenNotifier.dispose();
     _isInfoWindowOpenNotifier.dispose();
     _scrollController.dispose();
+    _timer?.cancel();
     super.dispose();
   }
 
-  List<Map<String, dynamic>> generateForecastData() {
+  Future<List<Map<String, dynamic>>> generateForecastData() async {
     final currentHour = DateTime.now().hour;
     final List<Map<String, dynamic>> forecastData = [];
-    final conditions = ["Sunny", "Cloudy", "Rainy"];
-    final icons = [Icons.wb_sunny, Icons.wb_cloudy, Icons.grain];
+    final conditions = ["Clear", "Cloudy", "Rainy", "Stormy", "Windy"];
+    final dayIcons = [
+      Icons.wb_sunny,
+      Icons.wb_cloudy,
+      Icons.grain,
+      Icons.thunderstorm,
+      Icons.air
+    ];
+    final nightIcons = [
+      Icons.nights_stay,
+      Icons.cloud,
+      Icons.grain,
+      Icons.thunderstorm,
+      Icons.air
+    ];
 
     for (int i = 0; i < 6; i++) {
       final forecastHour = (currentHour + i) % 24;
-      final conditionIndex = forecastHour % 3;
+      final conditionIndex = forecastHour % conditions.length;
+      final isDaytime = forecastHour >= 6 && forecastHour <= 18;
       forecastData.add({
         "time": TimeOfDay(hour: forecastHour, minute: 0).format(context),
         "hour": forecastHour,
         "temp": "${30 + i}°C",
         "condition": conditions[conditionIndex],
-        "icon": icons[conditionIndex]
+        "icon":
+            isDaytime ? dayIcons[conditionIndex] : nightIcons[conditionIndex]
       });
     }
 
     return forecastData;
   }
 
-  void centerScrollToCurrentHour() {
-    final forecastData = generateForecastData();
+  void centerScrollToCurrentHour() async {
+    final forecastData = await generateForecastData();
     final currentHour = DateTime.now().hour;
     final index =
         forecastData.indexWhere((data) => data['hour'] == currentHour);
@@ -124,20 +141,30 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
+  void _startHourlyUpdateTimer() {
+    _timer = Timer.periodic(Duration(minutes: 1), (timer) {
+      final currentMinute = DateTime.now().minute;
+      if (currentMinute == 0) {
+        setState(() {
+          // Update the UI when the hour changes
+        });
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance
         .addPostFrameCallback((_) => centerScrollToCurrentHour());
     _createCustomMarker(); // Add custom marker when the map is initialized
+    _startHourlyUpdateTimer(); // Start the timer to update hourly
   }
 
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
-    final forecastData = generateForecastData();
-    final currentHour = DateTime.now().hour;
 
     return Scaffold(
       drawer: Drawer(
@@ -223,19 +250,10 @@ class _MapScreenState extends State<MapScreen> {
             backdropEnabled: true,
             backdropColor: Colors.transparent,
             color: Colors.transparent,
-            minHeight: 125,
+            minHeight: 120,
             maxHeight: screenHeight * 0.64,
             margin: EdgeInsets.only(
                 bottom: 98), // Adjust margin to make space for the button
-            onPanelSlide: (position) {
-              double fabHeightClosed =
-                  screenHeight - 735; // Adjusted for initial state
-              double fabHeightOpened =
-                  screenHeight - 290; // Adjusted for opened state
-              _fabPositionNotifier.value = fabHeightClosed -
-                  ((fabHeightClosed - fabHeightOpened) * position);
-              _isPanelOpenNotifier.value = position > 0.1;
-            },
             onPanelOpened: () => _isPanelOpenNotifier.value = true,
             onPanelClosed: () => _isPanelOpenNotifier.value = false,
           ),
@@ -357,7 +375,7 @@ class _MapScreenState extends State<MapScreen> {
                 right: 16,
                 top: 75,
                 child: AnimatedOpacity(
-                  duration: Duration(milliseconds: 300),
+                  duration: Duration(milliseconds: 0),
                   opacity: isPanelOpen ? 0.0 : 1.0,
                   child: Container(
                     padding: EdgeInsets.all(10.0),
@@ -381,58 +399,73 @@ class _MapScreenState extends State<MapScreen> {
                               fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                         SizedBox(height: 8.0),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          controller: _scrollController,
-                          child: Row(
-                            children: forecastData.map((data) {
-                              final isCurrentHour = data['hour'] == currentHour;
-                              return Container(
-                                margin: EdgeInsets.only(right: 16.0),
-                                padding: EdgeInsets.all(8.0),
-                                decoration: BoxDecoration(
-                                  color: isCurrentHour
-                                      ? Colors.red[700]
-                                      : Colors.white,
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Column(
-                                  children: [
-                                    Icon(
-                                      data['icon'] as IconData,
+                        FutureBuilder<List<Map<String, dynamic>>>(
+                          future: generateForecastData(),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return CircularProgressIndicator();
+                            }
+                            if (!snapshot.hasData) {
+                              return Text('No data available');
+                            }
+                            final forecastData = snapshot.data!;
+                            final currentHour = DateTime.now().hour;
+                            return SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              controller: _scrollController,
+                              child: Row(
+                                children: forecastData.map((data) {
+                                  final isCurrentHour =
+                                      data['hour'] == currentHour;
+                                  return Container(
+                                    margin: EdgeInsets.only(right: 16.0),
+                                    padding: EdgeInsets.all(8.0),
+                                    decoration: BoxDecoration(
                                       color: isCurrentHour
-                                          ? Colors.white
-                                          : Colors.black,
+                                          ? Colors.red[700]
+                                          : Colors.white,
+                                      borderRadius: BorderRadius.circular(16),
                                     ),
-                                    Text(
-                                      data['time'] as String,
-                                      style: TextStyle(
-                                        color: isCurrentHour
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
+                                    child: Column(
+                                      children: [
+                                        Icon(
+                                          data['icon'] as IconData,
+                                          color: isCurrentHour
+                                              ? Colors.white
+                                              : Colors.black,
+                                        ),
+                                        Text(
+                                          data['time'] as String,
+                                          style: TextStyle(
+                                            color: isCurrentHour
+                                                ? Colors.white
+                                                : Colors.black,
+                                          ),
+                                        ),
+                                        Text(
+                                          data['temp'] as String,
+                                          style: TextStyle(
+                                            color: isCurrentHour
+                                                ? Colors.white
+                                                : Colors.black,
+                                          ),
+                                        ),
+                                        Text(
+                                          data['condition'] as String,
+                                          style: TextStyle(
+                                            color: isCurrentHour
+                                                ? Colors.white
+                                                : Colors.black,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    Text(
-                                      data['temp'] as String,
-                                      style: TextStyle(
-                                        color: isCurrentHour
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
-                                    ),
-                                    Text(
-                                      data['condition'] as String,
-                                      style: TextStyle(
-                                        color: isCurrentHour
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                          ),
+                                  );
+                                }).toList(),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -481,20 +514,28 @@ class _MapScreenState extends State<MapScreen> {
             builder: (context, value, child) {
               return Positioned(
                 right: 16,
-                bottom:
-                    value + 80, // Adjust position to account for button height
-                child: FloatingActionButton(
-                  backgroundColor: Theme.of(context).primaryColor,
-                  foregroundColor: Colors.black,
-                  onPressed: () => _googleMapController.animateCamera(
-                    CameraUpdate.newCameraPosition(
-                      CameraPosition(
-                        target: LatLng(11.083018, 123.931450),
-                        zoom: 16.5, // Reset zoom level to 16.5
+                bottom: value,
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: _isPanelOpenNotifier,
+                  builder: (context, isPanelOpen, child) {
+                    return AnimatedOpacity(
+                      duration: Duration(milliseconds: 0),
+                      opacity: isPanelOpen ? 0.0 : 1.0,
+                      child: FloatingActionButton(
+                        backgroundColor: Theme.of(context).primaryColor,
+                        foregroundColor: Colors.black,
+                        onPressed: () => _googleMapController.animateCamera(
+                          CameraUpdate.newCameraPosition(
+                            CameraPosition(
+                              target: LatLng(11.083018, 123.931450),
+                              zoom: 16.5, // Reset zoom level to 16.5
+                            ),
+                          ),
+                        ),
+                        child: const Icon(Icons.center_focus_strong),
                       ),
-                    ),
-                  ),
-                  child: const Icon(Icons.center_focus_strong),
+                    );
+                  },
                 ),
               );
             },

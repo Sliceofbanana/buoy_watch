@@ -68,6 +68,7 @@ flutter:
     - assets/Ellipse 8.png
     - assets/Group 21.png
     - assets/buoy.png
+    - assets/model2.tflite
 
   # To add assets to your application, add an assets section, like this:
   # assets:
