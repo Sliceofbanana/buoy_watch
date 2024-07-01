@@ -1,8 +1,9 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.buoywatch">
     <application
-        android:label="thesisidk"
+        android:label="Buoy Watch"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/logo">
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyAzYMlIagzDzcOvUZTJfPe_VG5H6dUGi5M"/>

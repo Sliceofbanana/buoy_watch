@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "792450465523",
+    "firebase_url": "https://weatherdatadb-ca0a3-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "weatherdatadb-ca0a3",
+    "storage_bucket": "weatherdatadb-ca0a3.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:792450465523:android:e42eaa1b258c5deef34186",
+        "android_client_info": {
+          "package_name": "com.example.thesisidk"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBH2mk4JP3hWrphREY0WQ-VFJOFwVzMPTw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

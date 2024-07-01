@@ -9,8 +9,16 @@ import 'panel_widget.dart';
 import 'AboutUsScreen.dart';
 import 'ContactUsScreen.dart';
 import 'splash_screen.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'package:firebase_database/firebase_database.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized(); // Add this line
+  await Firebase.initializeApp(
+    // Add this line
+    options: DefaultFirebaseOptions.currentPlatform, // Add this line
+  ); // Add this line
   runApp(MyApp());
 }
 
@@ -49,6 +57,14 @@ class _MapScreenState extends State<MapScreen> {
   final ScrollController _scrollController = ScrollController();
   final Set<Marker> _markers = {};
   Timer? _timer;
+
+  Map<String, dynamic> buoyData = {
+    "AngleX": 0,
+    "AngleY": 0,
+    "altitude": 0,
+    "latitude": 0,
+    "longitude": 0,
+  };
 
   @override
   void dispose() {
@@ -142,14 +158,57 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _startHourlyUpdateTimer() {
-    _timer = Timer.periodic(Duration(minutes: 1), (timer) {
-      final currentMinute = DateTime.now().minute;
-      if (currentMinute == 0) {
+    // Calculate the duration until the next hour
+    final now = DateTime.now();
+    final nextHour = DateTime(now.year, now.month, now.day, now.hour + 1);
+    final initialDelay = nextHour.difference(now);
+
+    // Set a one-time timer to fire at the start of the next hour
+    Timer(initialDelay, () {
+      // Update the UI at the start of the next hour
+      setState(() {
+        // Update the UI when the hour changes
+      });
+
+      // Set up a periodic timer to fire at the start of every subsequent hour
+      _timer = Timer.periodic(Duration(hours: 1), (timer) {
         setState(() {
           // Update the UI when the hour changes
         });
-      }
+      });
     });
+  }
+
+  void _fetchBuoyData() {
+    DatabaseReference ref =
+        FirebaseDatabase.instance.reference().child('BuoyData');
+    ref.onValue.listen((event) {
+      final data = event.snapshot.value as Map<dynamic, dynamic>;
+      setState(() {
+        buoyData = {
+          "AngleX": data['AngleX'],
+          "AngleY": data['AngleY'],
+          "altitude": data['altitude'],
+          "latitude": data['latitude'],
+          "longitude": data['longitude'],
+        };
+        buoyData["status"] = getBuoyStatus(data['AngleX'], data['AngleY']);
+      });
+    });
+  }
+
+  String getBuoyStatus(double angleX, double angleY) {
+    const double thresholdStable = 5.0;
+    const double thresholdWaning = 15.0;
+
+    if (angleX.abs() <= thresholdStable && angleY.abs() <= thresholdStable) {
+      return 'Stable';
+    } else if (angleX.abs() <= thresholdWaning &&
+        angleY.abs() <= thresholdWaning) {
+      return 'Warning';
+    } else {
+      return 'Capped';
+    }
   }
 
   @override
@@ -158,7 +217,8 @@ class _MapScreenState extends State<MapScreen> {
     WidgetsBinding.instance
         .addPostFrameCallback((_) => centerScrollToCurrentHour());
     _createCustomMarker(); // Add custom marker when the map is initialized
-    _startHourlyUpdateTimer(); // Start the timer to update hourly
+    _startHourlyUpdateTimer(); // Start the timer to update
+    _fetchBuoyData();
   }
 
   @override
@@ -322,26 +382,38 @@ class _MapScreenState extends State<MapScreen> {
                             height: 8.0), // Space between title and first data
                         Align(
                           alignment: Alignment.center,
-                          child: Text('X-axis: 1.23'),
+                          child: Text('X-axis: ${buoyData["AngleX"]}'),
                         ),
                         SizedBox(
                             height: 8.0), // Space between X-axis and Y-axis
                         Align(
                           alignment: Alignment.center,
-                          child: Text('Y-axis: 4.56'),
+                          child: Text('Y-axis: ${buoyData["AngleY"]}'),
                         ),
                         SizedBox(
-                            height: 8.0), // Space between Y-axis and Z-axis
+                            height: 8.0), // Space between Y-axis and Altitude
                         Align(
                           alignment: Alignment.center,
-                          child: Text('Z-axis: 7.89'),
+                          child: Text('Altitude: ${buoyData["altitude"]}'),
+                        ),
+                        SizedBox(
+                            height: 8.0), // Space between Altitude and Latitude
+                        Align(
+                          alignment: Alignment.center,
+                          child: Text('Latitude: ${buoyData["latitude"]}'),
                         ),
                         SizedBox(
                             height:
-                                8.0), // Space between Z-axis and Tilt Status
+                                8.0), // Space between Latitude and Longitude
                         Align(
                           alignment: Alignment.center,
-                          child: Text('Tilt Status: Stable'),
+                          child: Text('Longitude: ${buoyData["longitude"]}'),
+                        ),
+                        SizedBox(
+                            height: 8.0), // Space between Longitude and Status
+                        Align(
+                          alignment: Alignment.center,
+                          child: Text('Status: ${buoyData["status"]}'),
                         ),
                         SizedBox(height: 16.0), // Space before the button
                         Center(

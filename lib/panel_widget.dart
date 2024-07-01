@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 class PanelWidget extends StatefulWidget {
   final ScrollController controller;
@@ -30,6 +31,14 @@ class _PanelWidgetState extends State<PanelWidget> {
   void dispose() {
     _timer.cancel();
     super.dispose();
+  }
+
+  Future<Map<String, dynamic>> fetchWeatherData() async {
+    DatabaseReference ref = FirebaseDatabase.instance.ref('WeatherData');
+    DatabaseEvent event = await ref.once();
+    DataSnapshot snapshot = event.snapshot;
+
+    return Map<String, dynamic>.from(snapshot.value as Map);
   }
 
   @override
@@ -122,15 +131,38 @@ class _PanelWidgetState extends State<PanelWidget> {
                     padding: EdgeInsets.symmetric(
                         horizontal: cardPadding,
                         vertical: paddingVertical), // Adjust padding
-                    child: GridView.count(
-                      crossAxisCount: 2,
-                      padding: EdgeInsets.all(0),
-                      children: [
-                        _buildWeatherCard("Temperature", "40%"),
-                        _buildWeatherCard("Wave Speed", "60%"),
-                        _buildWeatherCard("Humidity", "27%"),
-                        _buildWeatherCard("Rain Intensity", "60%"),
-                      ],
+                    child: FutureBuilder<Map<String, dynamic>>(
+                      future: fetchWeatherData(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return Center(child: CircularProgressIndicator());
+                        } else if (snapshot.hasError) {
+                          return Center(
+                              child: Text('Error: ${snapshot.error}'));
+                        } else if (!snapshot.hasData ||
+                            snapshot.data!.isEmpty) {
+                          return Center(child: Text('No data available'));
+                        } else {
+                          final weatherData = snapshot.data!;
+                          return GridView.count(
+                            crossAxisCount: 2,
+                            padding: EdgeInsets.all(0),
+                            children: [
+                              _buildWeatherCard(
+                                  "Temperature",
+                                  weatherData['Temperature'].toString() +
+                                      " °C"),
+                              _buildWeatherCard("Humidity",
+                                  weatherData['Humidity'].toString() + " %"),
+                              _buildWeatherCard("Pressure",
+                                  weatherData['Pressure'].toString() + " Pa"),
+                              _buildWeatherCard("Light",
+                                  weatherData['Light'].toString() + " lux"),
+                            ],
+                          );
+                        }
+                      },
                     ),
                   ),
                 ),
