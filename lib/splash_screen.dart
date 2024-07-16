@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'main.dart';
 
 class SplashScreen extends StatefulWidget {
+  const SplashScreen({Key? key}) : super(key: key);
+
   @override
   _SplashScreenState createState() => _SplashScreenState();
 }
@@ -11,10 +13,10 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
     // Delay for 3 seconds and then navigate to the MapScreen
-    Future.delayed(Duration(seconds: 3), () {
+    Future.delayed(const Duration(seconds: 3), () {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => MapScreen()),
+        MaterialPageRoute(builder: (context) => const MapScreen()),
       );
     });
   }
@@ -35,8 +37,8 @@ class _SplashScreenState extends State<SplashScreen> {
               color: Colors.red, // Apply a color filter
               colorBlendMode: BlendMode.modulate, // Apply a color blend mode
             ),
-            SizedBox(height: 20),
-            Text(
+            const SizedBox(height: 20),
+            const Text(
               'BUOY WATCH',
               style: TextStyle(
                 color: Colors.black,

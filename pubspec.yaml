@@ -30,8 +30,10 @@ dependencies:
   intl: ^0.17.0
   firebase_core: ^2.32.0
   firebase_database: ^10.5.7
+  firebase_auth: ^4.7.1
   cloud_firestore: ^4.17.5
   cupertino_icons: ^1.0.6
+  tflite_flutter: ^0.10.4
 
 # Dev dependencies are packages only needed during development or build process.
 dev_dependencies:
@@ -39,6 +41,9 @@ dev_dependencies:
     sdk: flutter
   flutter_launcher_icons: ^0.9.2
   flutter_lints: ^3.0.0
+  mockito: ^5.0.16
+  build_runner: ^2.0.0
+  firebase_core_platform_interface: ^5.0.0
 
 flutter_icons:
   android: true

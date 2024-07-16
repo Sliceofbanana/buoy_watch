@@ -5,8 +5,19 @@ import 'package:firebase_database/firebase_database.dart';
 
 class PanelWidget extends StatefulWidget {
   final ScrollController controller;
+  final FirebaseDatabase database;
+  final Map<String, dynamic>? forecast;
+  final Future<List<Map<String, dynamic>>> forecastData;
+  final Map<String, dynamic> buoyData; // Add this line
 
-  const PanelWidget({Key? key, required this.controller}) : super(key: key);
+  const PanelWidget({
+    Key? key,
+    required this.controller,
+    required this.database,
+    required this.forecast,
+    required this.forecastData,
+    required this.buoyData,
+  }) : super(key: key);
 
   @override
   _PanelWidgetState createState() => _PanelWidgetState();
@@ -15,15 +26,23 @@ class PanelWidget extends StatefulWidget {
 class _PanelWidgetState extends State<PanelWidget> {
   late Timer _timer;
   late DateTime _currentTime;
+  Map<String, dynamic>? _weatherData;
 
   @override
   void initState() {
     super.initState();
     _currentTime = DateTime.now();
-    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       setState(() {
         _currentTime = DateTime.now();
       });
+    });
+    fetchWeatherDataStream().listen((data) {
+      if (data != _weatherData) {
+        setState(() {
+          _weatherData = data;
+        });
+      }
     });
   }
 
@@ -33,12 +52,12 @@ class _PanelWidgetState extends State<PanelWidget> {
     super.dispose();
   }
 
-  Future<Map<String, dynamic>> fetchWeatherData() async {
-    DatabaseReference ref = FirebaseDatabase.instance.ref('WeatherData');
-    DatabaseEvent event = await ref.once();
-    DataSnapshot snapshot = event.snapshot;
-
-    return Map<String, dynamic>.from(snapshot.value as Map);
+  Stream<Map<String, dynamic>> fetchWeatherDataStream() {
+    DatabaseReference ref = widget.database.ref('WeatherData');
+    return ref.onValue.map((event) {
+      DataSnapshot snapshot = event.snapshot;
+      return Map<String, dynamic>.from(snapshot.value as Map);
+    });
   }
 
   @override
@@ -53,22 +72,21 @@ class _PanelWidgetState extends State<PanelWidget> {
     final iconSize = screenWidth * 0.06;
 
     return Padding(
-      padding: EdgeInsets.all(0),
+      padding: const EdgeInsets.all(0),
       child: Container(
-        decoration: BoxDecoration(
-          color: Colors.transparent, // Outer container is transparent
+        decoration: const BoxDecoration(
+          color: Colors.transparent,
         ),
         child: Padding(
-          padding: EdgeInsets.all(0), // Remove inner padding
+          padding: const EdgeInsets.all(0),
           child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white, // Inner panel background
+            decoration: const BoxDecoration(
+              color: Colors.white,
               borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Handle Indicator
                 Center(
                   child: Container(
                     width: screenWidth * 0.15,
@@ -77,12 +95,11 @@ class _PanelWidgetState extends State<PanelWidget> {
                       color: Colors.grey,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    margin: EdgeInsets.only(top: 15, bottom: 25),
+                    margin: const EdgeInsets.only(top: 15, bottom: 25),
                   ),
                 ),
                 Padding(
-                  padding: EdgeInsets.symmetric(
-                      horizontal: paddingHorizontal), // Adjust padding
+                  padding: EdgeInsets.symmetric(horizontal: paddingHorizontal),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -90,7 +107,7 @@ class _PanelWidgetState extends State<PanelWidget> {
                         children: [
                           Icon(Icons.calendar_today,
                               color: Colors.red[700], size: iconSize),
-                          SizedBox(width: 8),
+                          const SizedBox(width: 8),
                           Text("Date and Time: ",
                               style: TextStyle(fontSize: cardFontSize)),
                           Expanded(
@@ -106,20 +123,18 @@ class _PanelWidgetState extends State<PanelWidget> {
                       SizedBox(height: paddingVertical),
                       Row(
                         children: [
-                          Icon(Icons.cloud,
+                          Icon(widget.forecast?['icon'] ?? Icons.cloud,
                               color: Colors.red[700], size: iconSize),
-                          SizedBox(width: 8),
+                          const SizedBox(width: 8),
                           Text("Weather Conditions: ",
                               style: TextStyle(fontSize: cardFontSize)),
                           Text(
-                            "RED ALERT",
+                            widget.forecast?['condition'] ?? "N/A",
                             style: TextStyle(
                                 color: Colors.red,
                                 fontSize: cardFontSize,
                                 fontWeight: FontWeight.bold),
                           ),
-                          Icon(Icons.warning,
-                              color: Colors.red, size: iconSize),
                         ],
                       ),
                       SizedBox(height: paddingVertical * 2),
@@ -129,44 +144,26 @@ class _PanelWidgetState extends State<PanelWidget> {
                 Expanded(
                   child: Padding(
                     padding: EdgeInsets.symmetric(
-                        horizontal: cardPadding,
-                        vertical: paddingVertical), // Adjust padding
-                    child: FutureBuilder<Map<String, dynamic>>(
-                      future: fetchWeatherData(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return Center(child: CircularProgressIndicator());
-                        } else if (snapshot.hasError) {
-                          return Center(
-                              child: Text('Error: ${snapshot.error}'));
-                        } else if (!snapshot.hasData ||
-                            snapshot.data!.isEmpty) {
-                          return Center(child: Text('No data available'));
-                        } else {
-                          final weatherData = snapshot.data!;
-                          return GridView.count(
+                        horizontal: cardPadding, vertical: paddingVertical),
+                    child: _weatherData == null
+                        ? const Center(child: CircularProgressIndicator())
+                        : GridView.count(
                             crossAxisCount: 2,
-                            padding: EdgeInsets.all(0),
+                            padding: const EdgeInsets.all(0),
                             children: [
+                              _buildWeatherCard("Temperature",
+                                  "${_weatherData!['Temperature']} °C"),
                               _buildWeatherCard(
-                                  "Temperature",
-                                  weatherData['Temperature'].toString() +
-                                      " °C"),
-                              _buildWeatherCard("Humidity",
-                                  weatherData['Humidity'].toString() + " %"),
+                                  "Humidity", "${_weatherData!['Humidity']} %"),
                               _buildWeatherCard("Pressure",
-                                  weatherData['Pressure'].toString() + " Pa"),
-                              _buildWeatherCard("Light",
-                                  weatherData['Light'].toString() + " lux"),
+                                  "${_weatherData!['Pressure']} Pa"),
+                              _buildWeatherCard(
+                                  "Light", "${_weatherData!['Light']} lux"),
                             ],
-                          );
-                        }
-                      },
-                    ),
+                          ),
                   ),
                 ),
-                SizedBox(height: 5), // Additional padding at the bottom
+                const SizedBox(height: 5),
               ],
             ),
           ),
@@ -181,9 +178,9 @@ class _PanelWidgetState extends State<PanelWidget> {
     final valueFontSize = screenWidth * 0.06;
 
     return Card(
-      elevation: 0, // Remove the shadow
+      elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20), // Rounded corners
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Padding(
         padding: const EdgeInsets.all(8.0),
@@ -194,7 +191,7 @@ class _PanelWidgetState extends State<PanelWidget> {
               value,
               style: TextStyle(fontSize: valueFontSize, color: Colors.red),
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             Text(
               title,
               style: TextStyle(fontSize: cardFontSize, color: Colors.black),
