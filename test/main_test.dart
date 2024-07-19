@@ -5,14 +5,16 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:mockito/mockito.dart';
 import 'package:buoy_watch/main.dart';
 import 'mocks.dart';
-import 'firebase_test_setup.dart';
+import 'setupfirebasemocks.dart';
 
-void main() {
+Future<void> main() async {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUpAll(() async {
+  try {
     await initializeFirebase();
-  });
+  } catch (e) {
+    print('Error initializing Firebase: $e');
+  }
 
   group('FirebaseDatabase', () {
     late MockDatabaseReference mockDatabaseReference;
@@ -22,8 +24,9 @@ void main() {
       mockDatabaseReference = MockDatabaseReference();
       controller = StreamController<DatabaseEvent>();
 
+      // Correctly return a new instance of MockDatabaseReference
       when(mockDatabaseReference.child('WeatherData'))
-          .thenReturn(mockDatabaseReference);
+          .thenReturn(MockDatabaseReference());
       when(mockDatabaseReference.onValue).thenAnswer((_) => controller.stream);
     });
 

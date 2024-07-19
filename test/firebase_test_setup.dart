@@ -1,47 +1,53 @@
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:mockito/mockito.dart';
+import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:mockito/mockito.dart';
+import 'package:buoy_watch/main.dart';
+import 'mocks.dart';
+import 'setupfirebasemocks.dart';
 
-class MockFirebaseApp extends Mock implements FirebaseApp {
-  @override
-  String get name => 'test';
-
-  @override
-  FirebaseOptions get options => const FirebaseOptions(
-        apiKey: 'testApiKey',
-        appId: 'testAppId',
-        messagingSenderId: 'testSenderId',
-        projectId: 'testProjectId',
-      );
-}
-
-class MockFirebaseAuth extends Mock implements FirebaseAuth {}
-
-void setupFirebaseMocks() {
+void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  // Create the mock FirebaseApp
-  final mockFirebaseApp = MockFirebaseApp();
+  setUpAll(() async {
+    await initializeFirebase();
+  });
 
-  // Mock FirebaseAuth instanceFor
-  final mockFirebaseAuth = MockFirebaseAuth();
-  when(FirebaseAuth.instanceFor(app: mockFirebaseApp))
-      .thenReturn(mockFirebaseAuth);
+  group('FirebaseDatabase', () {
+    late MockDatabaseReference mockDatabaseReference;
+    late StreamController<DatabaseEvent> controller;
 
-  // Set up other FirebaseAuth method stubs if needed
-  when(mockFirebaseAuth.authStateChanges())
-      .thenAnswer((_) => const Stream.empty());
-}
+    setUp(() {
+      mockDatabaseReference = MockDatabaseReference();
+      controller = StreamController<DatabaseEvent>();
 
-Future<void> initializeFirebase() async {
-  setupFirebaseMocks();
-  await Firebase.initializeApp(
-    options: const FirebaseOptions(
-      apiKey: 'testApiKey',
-      appId: 'testAppId',
-      messagingSenderId: 'testSenderId',
-      projectId: 'testProjectId',
-    ),
-  );
+      when(mockDatabaseReference.child('WeatherData'))
+          .thenReturn(mockDatabaseReference);
+      when(mockDatabaseReference.onValue).thenAnswer((_) => controller.stream);
+    });
+
+    tearDown(() {
+      controller.close();
+    });
+
+    testWidgets('Fetch Buoy Data', (WidgetTester tester) async {
+      await tester.pumpWidget(const MaterialApp(
+        home: MapScreen(),
+      ));
+
+      var mockSnapshot = MockDataSnapshot();
+      when(mockSnapshot.value).thenReturn({"latitude": 0, "longitude": 0});
+
+      var mockEvent = MockDatabaseEvent();
+      when(mockEvent.snapshot).thenReturn(mockSnapshot);
+
+      controller.add(mockEvent);
+
+      await tester.pump();
+
+      expect(find.text('Latitude: 0'), findsOneWidget);
+      expect(find.text('Longitude: 0'), findsOneWidget);
+    });
+  });
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:sliding_up_panel/sliding_up_panel.dart';
@@ -14,15 +15,15 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
+import 'sos_notification.dart';
 
 Future<void> main() async {
   SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(statusBarColor: Colors.transparent));
-  WidgetsFlutterBinding.ensureInitialized(); // Add this line
+  WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
-    // Add this line
-    options: DefaultFirebaseOptions.currentPlatform, // Add this line
-  ); // Add this line
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 
@@ -66,8 +67,8 @@ class _MapScreenState extends State<MapScreen> {
   final Set<Marker> _markers = {};
   Timer? _timer;
   late Interpreter _interpreter;
-  late List<List<double>> _inputBuffer;
-  late List<List<double>> _outputBuffer;
+  late SosNotificationHandler _sosNotificationHandler;
+  bool isModelLoaded = false;
 
   Map<String, dynamic> buoyData = {
     "AngleX": 0,
@@ -90,69 +91,278 @@ class _MapScreenState extends State<MapScreen> {
     super.dispose();
   }
 
-  Future<List<Map<String, dynamic>>> generateForecastData() async {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => centerScrollToCurrentHour());
+    _startHourlyUpdateTimer();
+    _fetchBuoyData();
+    _fetchInitialCameraPosition();
+    _startBuoyUpdateListener();
+    loadModel().then((_) {
+      // After loading the model, you can now safely call prediction functions.
+      if (isModelLoaded) {
+        generateForecastData(context);
+      }
+    });
+    _sosNotificationHandler = SosNotificationHandler(context);
+    centerScrollToCurrentHour();
+  }
+
+  Future<void> loadModel() async {
+    try {
+      print("Loading model...");
+      _interpreter = await Interpreter.fromAsset('assets/model2.tflite');
+      isModelLoaded = true;
+      print("Model loaded successfully");
+    } catch (e) {
+      print("Failed to load model: $e");
+      isModelLoaded = false;
+    }
+  }
+
+  Future<Map<String, dynamic>> predictWeather(List<List<double>> data) async {
+    if (!isModelLoaded) {
+      print("Model not loaded yet. Returning empty predictions.");
+      return {
+        'floats': [],
+        'integers': [],
+      };
+    }
+    try {
+      // Prepare initial input
+      List<double> inputList = data.expand((e) => e).toList();
+      Float32List input = Float32List.fromList(inputList);
+
+      // Ensure input is non-null and correct length
+      if (input == null || input.isEmpty) {
+        throw Exception("Invalid input data: Input is null or empty.");
+      }
+
+      // Prepare output buffers
+      List<double> floatPredictions = [];
+      List<int> integerPredictions = [];
+
+      // Iterate 6 times to get predictions for the next 6 hours
+      for (int i = 0; i < 6; i++) {
+        // Prepare output buffer for a single prediction with shape [1, 1]
+        List<List<double>> outputBuffer =
+            List.generate(1, (_) => List.filled(1, 0.0));
+
+        // Debugging prints to check the state before running the model
+        print("Running inference for hour $i");
+        print("Input to model: $input");
+
+        // Run inference
+        _interpreter.run(input, outputBuffer);
+
+        // Debugging prints to check the state after running the model
+        print("Model output buffer for hour $i: $outputBuffer");
+
+        // Log the float prediction
+        double prediction = outputBuffer[0][0];
+        print("Model output buffer (floats) for hour $i: $prediction");
+
+        // Store the prediction
+        floatPredictions.add(prediction);
+        integerPredictions.add(prediction.round());
+
+        // Update the input with the new prediction for the next iteration
+        // Maintain the original context and add the new prediction
+        // Here we increment the hour value in the input data
+        data[0][4] = (data[0][4] + 1) %
+            24; // Increment the hour and wrap around at 24 hours
+        inputList = data.expand((e) => e).toList();
+        input = Float32List.fromList(inputList);
+      }
+
+      return {
+        'floats': floatPredictions,
+        'integers': integerPredictions,
+      };
+    } catch (e) {
+      print("Error predicting weather: $e");
+      return {
+        'floats': [],
+        'integers': [],
+      };
+    }
+  }
+
+  List<List<double>> prepareInputData(List<Map<String, dynamic>> data,
+      {bool useMockData = false}) {
+    List<Map<String, dynamic>> mockData = [
+      {
+        'Temperature': 29.0,
+        'Dewpoint_temperature': 23.7,
+        'Pressure': 3021.0,
+        'Humidity': 73.13,
+        'Hour': 14,
+        'Day_of_week': 3,
+        'Month': 7,
+      },
+
+      // Add more mock data as needed
+    ];
+
+    List<Map<String, dynamic>> inputData = useMockData ? mockData : data;
+    print("Input data: $inputData");
+
+    return inputData
+        .map((e) => [
+              e['Temperature'] as double,
+              e['Dewpoint_temperature'] as double,
+              e['Pressure'] as double,
+              e['Humidity'] as double,
+              (e['Hour'] as int).toDouble(),
+              (e['Day_of_week'] as int).toDouble(),
+              (e['Month'] as int).toDouble(),
+            ])
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> generateForecastData(
+      BuildContext context) async {
     final currentHour = DateTime.now().hour;
     final List<Map<String, dynamic>> forecastList = [];
-    final conditions = ["Clear", "Cloudy", "Rainy", "Stormy", "Windy"];
-    final dayIcons = [
-      Icons.wb_sunny,
-      Icons.wb_cloudy,
-      Icons.grain,
-      Icons.thunderstorm,
-      Icons.air
-    ];
-    final nightIcons = [
-      Icons.nights_stay,
-      Icons.cloud,
-      Icons.grain,
-      Icons.thunderstorm,
-      Icons.air
-    ];
+
+    bool useMockData = true;
+
+    List<Map<String, dynamic>> data = [];
+    if (!useMockData) {
+      QuerySnapshot snapshot =
+          await FirebaseFirestore.instance.collection('WeatherData').get();
+      data = snapshot.docs
+          .map((doc) => doc.data() as Map<String, dynamic>)
+          .toList();
+    }
+
+    print("Using mock data: $useMockData");
+    print("Data: ${useMockData ? "Using mock data" : data}");
+
+    List<List<double>> inputData =
+        prepareInputData(data, useMockData: useMockData);
+
+    print("Input data: $inputData");
+
+    if (!isModelLoaded) {
+      await loadModel();
+    }
+
+    Map<String, dynamic> modelOutput = await predictWeather(inputData);
+
+    print("Model output (floats): ${modelOutput['floats']}");
+    print("Model output (integers): ${modelOutput['integers']}");
+    final conditions = {
+      1: "Clear",
+      2: "Fair",
+      3: "Cloudy",
+      4: "Overcast",
+      5: "Fog",
+      6: "Freezing Fog",
+      7: "Light Rain",
+      8: "Rain",
+      9: "Heavy Rain",
+      10: "Freezing Rain",
+      11: "Heavy Freezing Rain",
+      12: "Sleet",
+      13: "Heavy Sleet",
+      14: "Rain Shower",
+      15: "Heavy Rain Shower",
+      16: "Sleet Shower",
+      17: "Heavy Sleet Shower",
+      18: "Lightning",
+      19: "Hail",
+      20: "Thunderstorm",
+      21: "Heavy Thunderstorm",
+      22: "Storm"
+    };
+
+    final dayIcons = {
+      1: Icons.wb_sunny,
+      2: Icons.wb_sunny_outlined,
+      3: Icons.wb_cloudy,
+      4: Icons.filter_drama,
+      5: Icons.blur_on,
+      6: Icons.ac_unit,
+      7: Icons.grain,
+      8: Icons.invert_colors,
+      9: Icons.invert_colors_off,
+      10: Icons.ac_unit,
+      11: Icons.ac_unit,
+      12: Icons.grain,
+      13: Icons.grain,
+      14: Icons.shower,
+      15: Icons.shower,
+      16: Icons.shower,
+      17: Icons.shower,
+      18: Icons.flash_on,
+      19: Icons.ac_unit,
+      20: Icons.bolt,
+      21: Icons.bolt,
+      22: Icons.storm
+    };
+
+    final nightIcons = {
+      1: Icons.nights_stay,
+      2: Icons.brightness_2,
+      3: Icons.cloud,
+      4: Icons.cloud,
+      5: Icons.blur_on,
+      6: Icons.ac_unit,
+      7: Icons.grain,
+      8: Icons.invert_colors,
+      9: Icons.invert_colors_off,
+      10: Icons.ac_unit,
+      11: Icons.ac_unit,
+      12: Icons.grain,
+      13: Icons.grain,
+      14: Icons.shower,
+      15: Icons.shower,
+      16: Icons.shower,
+      17: Icons.shower,
+      18: Icons.flash_on,
+      19: Icons.ac_unit,
+      20: Icons.bolt,
+      21: Icons.bolt,
+      22: Icons.storm
+    };
 
     for (int i = 0; i < 6; i++) {
       final forecastHour = (currentHour + i) % 24;
-      final conditionIndex = forecastHour % conditions.length;
       final isDaytime = forecastHour >= 6 && forecastHour <= 18;
 
-      // Prepare the input for the model
-      _inputBuffer[0][0] = currentHour.toDouble();
-      // Add other necessary input features
+      // Convert model output from float to int
+      int weatherCode = modelOutput['integers'][i];
 
-      // Run the model
-      _interpreter.run(_inputBuffer, _outputBuffer);
-
-      // Get the output
-      final predictedTemp =
-          _outputBuffer[0][0]; // Assume temperature is the first output
+      // Retrieve the condition and icon
+      final condition = conditions[weatherCode] ?? "Unknown";
+      final icon = isDaytime ? dayIcons[weatherCode] : nightIcons[weatherCode];
 
       forecastList.add({
         "time": TimeOfDay(hour: forecastHour, minute: 0).format(context),
         "hour": forecastHour,
-        "temp": "${predictedTemp.toStringAsFixed(1)}°C",
-        "condition": conditions[conditionIndex],
-        "icon":
-            isDaytime ? dayIcons[conditionIndex] : nightIcons[conditionIndex]
+        "condition": condition,
+        "icon": icon
       });
     }
-
+    print('=============================================');
+    print("Forecast List: $forecastList");
+    print('=============================================');
     return forecastList;
   }
 
   void centerScrollToCurrentHour() async {
-    final forecastData = await generateForecastData();
+    final forecastData = await generateForecastData(context);
     final currentHour = DateTime.now().hour;
-
-    // Use forecastData directly as it's already a list
     final forecastList = forecastData;
-
-    // Find the index of the current hour in the list
     final index =
         forecastList.indexWhere((data) => data['hour'] == currentHour);
     if (index != -1) {
       _scrollController.animateTo(
-        index *
-            116.0, // Adjust this value based on the width of each forecast item
-        duration: const Duration(seconds: 1),
+        index * 116.0,
+        duration: const Duration(seconds: 0),
         curve: Curves.easeInOut,
       );
     }
@@ -187,23 +397,17 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _startHourlyUpdateTimer() {
-    // Calculate the duration until the next hour
     final now = DateTime.now();
     final nextHour = DateTime(now.year, now.month, now.day, now.hour + 1);
     final initialDelay = nextHour.difference(now);
 
     // Set a one-time timer to fire at the start of the next hour
     Timer(initialDelay, () {
-      // Update the UI at the start of the next hour
-      setState(() {
-        // Update the UI when the hour changes
-      });
+      setState(() {});
 
       // Set up a periodic timer to fire at the start of every subsequent hour
       _timer = Timer.periodic(const Duration(hours: 1), (timer) {
-        setState(() {
-          // Update the UI when the hour changes
-        });
+        setState(() {});
       });
     });
   }
@@ -221,22 +425,17 @@ class _MapScreenState extends State<MapScreen> {
           "longitude": data['longitude'],
         };
         buoyData["status"] = getBuoyStatus(data['AngleX'], data['AngleY']);
+
         LatLng newPosition =
             LatLng(buoyData["latitude"], buoyData["longitude"]);
-        // Update camera position whenever buoy data changes
         _moveCameraToPosition(newPosition);
-        // Update custom marker position
         _createCustomMarker(newPosition);
+
+        if (buoyData["status"] == 'Capped') {
+          _showCappedNotification(newPosition);
+        }
       });
     });
-  }
-
-  void _moveCameraToPosition(LatLng position) {
-    _googleMapController.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(target: position, zoom: 16.5),
-      ),
-    );
   }
 
   String getBuoyStatus(double angleX, double angleY) {
@@ -253,22 +452,33 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => centerScrollToCurrentHour());
-    _startHourlyUpdateTimer(); // Start the timer to update
-    _fetchBuoyData();
-    _fetchInitialCameraPosition();
-    _startBuoyUpdateListener();
-    _loadModel();
+  void _showCappedNotification(LatLng position) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Buoy Capped"),
+          content: Text(
+              "The buoy is capped at position: \nLatitude: ${position.latitude}, Longitude: ${position.longitude}"),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
   }
 
-  Future<void> _loadModel() async {
-    _interpreter = await Interpreter.fromAsset('model2.tflite');
-    _inputBuffer = List.generate(1, (index) => List.filled(10, 0.0));
-    _outputBuffer = List.generate(1, (index) => List.filled(10, 0.0));
+  void _moveCameraToPosition(LatLng position) {
+    _googleMapController.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: position, zoom: 16.5),
+      ),
+    );
   }
 
   Future<void> _fetchInitialCameraPosition() async {
@@ -316,9 +526,7 @@ class _MapScreenState extends State<MapScreen> {
         buoyData["status"] = getBuoyStatus(data['AngleX'], data['AngleY']);
         LatLng newPosition =
             LatLng(buoyData["latitude"], buoyData["longitude"]);
-        // Update camera position whenever buoy data changes
         _moveCameraToPosition(newPosition);
-        // Update custom marker position
         _createCustomMarker(newPosition);
       });
     });
@@ -414,7 +622,6 @@ class _MapScreenState extends State<MapScreen> {
             panelBuilder: (controller) => PanelWidget(
               controller: controller,
               database: FirebaseDatabase.instance,
-              forecast: const {},
               forecastData: Future.value([]),
               buoyData: const {}, // Pass FirebaseDatabase instance here
             ),
@@ -584,7 +791,7 @@ class _MapScreenState extends State<MapScreen> {
                         ),
                         const SizedBox(height: 8.0),
                         FutureBuilder<List<Map<String, dynamic>>>(
-                          future: generateForecastData(),
+                          future: generateForecastData(context),
                           builder: (context, snapshot) {
                             if (snapshot.connectionState ==
                                 ConnectionState.waiting) {
@@ -673,14 +880,6 @@ class _MapScreenState extends State<MapScreen> {
                                         ),
                                         Text(
                                           data['time'] as String,
-                                          style: TextStyle(
-                                            color: isCurrentHour
-                                                ? Colors.white
-                                                : Colors.black,
-                                          ),
-                                        ),
-                                        Text(
-                                          data['temp'] as String,
                                           style: TextStyle(
                                             color: isCurrentHour
                                                 ? Colors.white

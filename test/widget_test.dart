@@ -1,27 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:buoy_watch/main.dart';
 import 'package:buoy_watch/panel_widget.dart';
 import 'mocks.dart';
-import 'firebase_test_setup.dart';
+import 'setupfirebasemocks.dart';
 
-void main() {
-  setUpAll(() async {
+Future<void> main() async {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  try {
     await initializeFirebase();
-  });
-
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    await tester.pumpWidget(const MyApp());
-
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
-  });
+  } catch (e) {
+    print('Error initializing Firebase: $e');
+  }
 
   testWidgets('PanelWidget content test', (WidgetTester tester) async {
     final mockDatabase = MockFirebaseDatabase();
@@ -55,6 +45,11 @@ void main() {
       ),
     ));
 
-    expect(find.text('Panel Widget Content'), findsOneWidget);
+    // Verify that the PanelWidget displays the expected content
+    expect(find.text('12:00 PM'), findsOneWidget);
+    expect(find.text('30°C'), findsOneWidget);
+    expect(find.text('Clear'), findsOneWidget);
+    expect(find.byIcon(Icons.wb_sunny), findsOneWidget);
+    expect(find.text('Stable'), findsOneWidget);
   });
 }

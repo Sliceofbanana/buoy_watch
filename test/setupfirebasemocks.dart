@@ -2,21 +2,41 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mockito/mockito.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logging/logging.dart';
 
-// Create a Mock class for FirebaseApp
-class MockFirebaseApp extends Mock implements FirebaseApp {}
+// Mock classes
+class MockFirebaseApp extends Mock implements FirebaseApp {
+  @override
+  String get name => 'MockApp';
 
-// Create a Mock class for FirebaseAuth
+  @override
+  FirebaseOptions get options => const FirebaseOptions(
+        apiKey: 'testApiKey',
+        appId: 'testAppId',
+        messagingSenderId: 'testSenderId',
+        projectId: 'testProjectId',
+      );
+}
+
 class MockFirebaseAuth extends Mock implements FirebaseAuth {}
+
+final Logger _logger = Logger('FirebaseMockSetup');
+
+void setupLogging() {
+  Logger.root.level = Level.ALL; // Set the logging level
+  Logger.root.onRecord.listen((LogRecord rec) {
+    print('${rec.level.name}: ${rec.time}: ${rec.message}');
+  });
+}
 
 void setupFirebaseMocks() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  // Create the mock FirebaseApp
   final mockFirebaseApp = MockFirebaseApp();
+  _logger.info('Setting up mock FirebaseApp');
 
-  // Set up the method stubs
-  when(mockFirebaseApp.name).thenReturn('test');
+  // Ensure that the mock is set up correctly
+  when(mockFirebaseApp.name).thenReturn('MockApp');
   when(mockFirebaseApp.options).thenReturn(const FirebaseOptions(
     apiKey: 'testApiKey',
     appId: 'testAppId',
@@ -24,13 +44,13 @@ void setupFirebaseMocks() {
     projectId: 'testProjectId',
   ));
 
-  // Mock FirebaseAuth instanceFor
   final mockFirebaseAuth = MockFirebaseAuth();
-  when(FirebaseAuth.instanceFor(app: mockFirebaseApp))
-      .thenReturn(mockFirebaseAuth);
-
-  // Set up other FirebaseAuth method stubs if needed
+  // Return the mock instance properly
+  when(() => FirebaseAuth.instanceFor(app: mockFirebaseApp))
+      .thenReturn(mockFirebaseAuth as FirebaseAuth Function());
   when(mockFirebaseAuth.authStateChanges()).thenAnswer((_) => Stream.empty());
+
+  _logger.info('Mock FirebaseAuth setup completed');
 }
 
 Future<void> initializeFirebase() async {
@@ -43,4 +63,10 @@ Future<void> initializeFirebase() async {
       projectId: 'testProjectId',
     ),
   );
+  _logger.info('Firebase initialized');
+}
+
+void main() {
+  setupLogging();
+  initializeFirebase();
 }
