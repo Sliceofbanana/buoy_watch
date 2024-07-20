@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:intl/intl.dart';
 
 class SosNotificationHandler {
   final BuildContext context;
@@ -65,14 +64,12 @@ class SosNotificationHandler {
 
         double latitude = data['latitude']?.toDouble() ?? 0.0;
         double longitude = data['longitude']?.toDouble() ?? 0.0;
-        String dateTime = data['dateTime'] ?? '';
 
-        print(
-            'Parsed values - Latitude: $latitude, Longitude: $longitude, DateTime: $dateTime');
+        print('Parsed values - Latitude: $latitude, Longitude: $longitude');
 
-        if (latitude != 0.0 && longitude != 0.0 && dateTime.isNotEmpty) {
+        if (latitude != 0.0 && longitude != 0.0) {
           print('Valid BuoyData found, calling _showSosNotification...');
-          _showSosNotification(latitude, longitude, dateTime);
+          _showSosNotification(latitude, longitude);
         } else {
           print('=============================================');
           print('No valid data found');
@@ -94,22 +91,16 @@ class SosNotificationHandler {
     print('=============================================');
     double latitude = 37.7749; // Mock data for testing
     double longitude = -122.4194; // Mock data for testing
-    String dateTime = DateTime.now().toString();
-    _showSosNotification(latitude, longitude, dateTime);
+    _showSosNotification(latitude, longitude);
   }
 
-  void _showSosNotification(
-      double latitude, double longitude, String dateTime) {
+  void _showSosNotification(double latitude, double longitude) {
+    print('Reached here');
     print('=============================================');
     print('Showing SOS notification...');
-    print('Latitude: $latitude, Longitude: $longitude, DateTime: $dateTime');
+    print('Latitude: $latitude, Longitude: $longitude');
     print('Calling showDialog now');
     print('=============================================');
-
-    // Formatting date and time
-    final DateTime parsedDateTime = DateTime.parse(dateTime);
-    final String formattedDate = DateFormat('MM/dd/yy').format(parsedDateTime);
-    final String formattedTime = DateFormat('hh:mm a').format(parsedDateTime);
 
     showDialog(
       context: context,
@@ -153,22 +144,6 @@ class SosNotificationHandler {
                 ),
               ),
               const SizedBox(height: 10),
-              Text(
-                "Date: $formattedDate",
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                "Time: $formattedTime",
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-              const SizedBox(height: 20),
               Container(
                 decoration: BoxDecoration(
                   color: Colors.red[700],
@@ -176,7 +151,7 @@ class SosNotificationHandler {
                 ),
                 child: TextButton(
                   onPressed: () {
-                    _handleHelpOnTheWay(latitude, longitude, dateTime);
+                    _handleHelpOnTheWay(latitude, longitude);
                   },
                   child: const Text(
                     'HELP IS ON THE WAY',
@@ -194,14 +169,13 @@ class SosNotificationHandler {
     );
   }
 
-  void _handleHelpOnTheWay(double latitude, double longitude, String dateTime) {
+  void _handleHelpOnTheWay(double latitude, double longitude) {
     print(
-        'Help is on the way for location: Latitude: $latitude, Longitude: $longitude at $dateTime');
+        'Help is on the way for location: Latitude: $latitude, Longitude: $longitude');
 
     // Simulate checking the input data
     assert(latitude != 0.0, 'Latitude should not be zero');
     assert(longitude != 0.0, 'Longitude should not be zero');
-    assert(dateTime.isNotEmpty, 'DateTime should not be empty');
 
     DatabaseReference statusRef =
         FirebaseDatabase.instance.ref().child('ButtonStatus').child('Status');

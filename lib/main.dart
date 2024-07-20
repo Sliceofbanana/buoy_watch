@@ -136,30 +136,23 @@ class _MapScreenState extends State<MapScreen> {
 
     print("Model is loaded, proceeding with predictions.");
     try {
-      // Prepare initial input
       List<double> inputList = data.expand((e) => e).toList();
       Float32List input = Float32List.fromList(inputList);
 
-      // Ensure input is non-null and correct length
       if (input.isEmpty) {
         throw Exception("Invalid input data: Input is null or empty.");
       }
 
-      // Prepare output buffers
       List<double> floatPredictions = [];
       List<int> integerPredictions = [];
 
-      // Iterate 6 times to get predictions for the next 6 hours
       for (int i = 0; i < 6; i++) {
-        // Prepare output buffer for a single prediction with shape [1, 1]
         List<List<double>> outputBuffer =
             List.generate(1, (_) => List.filled(1, 0.0));
 
-        // Debugging prints to check the state before running the model
         print("Running inference for hour $i");
         print("Input to model: $input");
 
-        // Run inference
         try {
           _interpreter.run(input, outputBuffer);
           print("Model output buffer for hour $i: $outputBuffer");
@@ -167,27 +160,19 @@ class _MapScreenState extends State<MapScreen> {
           print("Error during model run for hour $i: $e");
         }
 
-        // Log the float prediction
         double prediction = outputBuffer[0][0];
         print("Model output buffer (floats) for hour $i: $prediction");
 
-        // Store the prediction
         floatPredictions.add(prediction);
         integerPredictions.add(prediction.round());
 
-        // Update the input with the new prediction for the next iteration
-        // Maintain the original context and add the new prediction
-        // Here we increment the hour value in the input data
-        data[0][4] = (data[0][4] + 1) %
-            24; // Increment the hour and wrap around at 24 hours
+        data[0][4] = (data[0][4] + 1) % 24;
         inputList = data.expand((e) => e).toList();
         input = Float32List.fromList(inputList);
 
-        // Additional logging
         print("Updated input list for next iteration: $inputList");
       }
 
-      // Final results
       print("Final float predictions: $floatPredictions");
       print("Final integer predictions: $integerPredictions");
 
@@ -225,7 +210,7 @@ class _MapScreenState extends State<MapScreen> {
     return inputData.map((e) {
       return [
         e['Temperature'] as double,
-        e['DewPoint'] as double,
+        e['Dewpoint_temperature'] as double,
         e['Pressure'] as double,
         e['Humidity'] as double,
         (e['Hour'] as int).toDouble(),
@@ -297,12 +282,10 @@ class _MapScreenState extends State<MapScreen> {
       BuildContext context) async {
     print("generateForecastData function called");
 
+    final bool useMockData = true; // Set to true or false as needed
     final currentHour = DateTime.now().hour;
     final List<Map<String, dynamic>> forecastList = [];
 
-    bool useMockData = false;
-
-    // Fetch data from Firebase
     List<Map<String, dynamic>> data = [];
     if (!useMockData) {
       QuerySnapshot snapshot =
@@ -315,31 +298,20 @@ class _MapScreenState extends State<MapScreen> {
     print("Using mock data: $useMockData");
     print("Data: ${useMockData ? "Using mock data" : data}");
 
-    // Prepare input data for the model
     List<List<double>> inputData =
         prepareInputData(data, useMockData: useMockData);
 
     print("Prepared input data: $inputData");
 
-    // Load the model if not already loaded
     if (!isModelLoaded) {
       await loadModel();
     }
 
     print("Calling predictWeather.");
+    Map<String, dynamic> modelOutput = await predictWeather(inputData);
+    print("Model output (floats): ${modelOutput['floats']}");
+    print("Model output (integers): ${modelOutput['integers']}");
 
-    // Error handling and debug statements around predictWeather call
-    Map<String, dynamic> modelOutput;
-    try {
-      modelOutput = await predictWeather(inputData);
-      print("Model output (floats): ${modelOutput['floats']}");
-      print("Model output (integers): ${modelOutput['integers']}");
-    } catch (e) {
-      print("Error during model prediction: $e");
-      return forecastList; // Return empty list on error
-    }
-
-    // Map model output to forecast data
     final conditions = {
       1: "Clear",
       2: "Fair",
@@ -419,25 +391,23 @@ class _MapScreenState extends State<MapScreen> {
       final forecastHour = (currentHour + i) % 24;
       final isDaytime = forecastHour >= 6 && forecastHour <= 18;
 
-      // Convert model output from float to int
       int weatherCode = modelOutput['integers'][i];
 
-      // Retrieve the condition and icon
       final condition = conditions[weatherCode] ?? "Unknown";
-      final icon = isDaytime ? dayIcons[weatherCode] : nightIcons[weatherCode];
-      const defaultIcon = Icons.help;
+      final IconData icon =
+          (isDaytime ? dayIcons[weatherCode] : nightIcons[weatherCode]) ??
+              Icons.help;
 
       forecastList.add({
-        "time": TimeOfDay(hour: forecastHour, minute: 0).format(context),
         "hour": forecastHour,
+        "time": TimeOfDay(hour: forecastHour, minute: 0).format(context),
+        "icon": icon,
         "condition": condition,
-        "icon": icon ?? defaultIcon,
+        "isCurrentHour": forecastHour == currentHour,
       });
     }
 
-    print('=============================================');
-    print("Forecast List: $forecastList");
-    print('=============================================');
+    print("Forecast list generated: $forecastList");
 
     return forecastList;
   }
@@ -468,6 +438,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _createCustomMarker(LatLng position) async {
+    print('Creating custom marker at position: $position');
     final Uint8List markerIcon =
         await getBytesFromAsset('assets/Rectangle22.png', 50);
     setState(() {
@@ -577,6 +548,7 @@ class _MapScreenState extends State<MapScreen> {
         target: initialPosition,
         zoom: 16.5,
       );
+      print('Camera position updated to: $_initialCameraPosition');
       // Create the initial custom marker
       _createCustomMarker(initialPosition);
     });
@@ -591,11 +563,15 @@ class _MapScreenState extends State<MapScreen> {
         final data = snapshot.value as Map<dynamic, dynamic>;
         final double latitude = data['latitude'];
         final double longitude = data['longitude'];
+        print(
+            'Fetched data from Firebase: latitude=$latitude, longitude=$longitude');
         return LatLng(latitude, longitude);
       } else {
+        print('No data exists in Firebase. Using default position.');
         return _defaultCameraPosition.target;
       }
     } catch (e) {
+      print('Error fetching data from Firebase: $e');
       return _defaultCameraPosition.target;
     }
   }
