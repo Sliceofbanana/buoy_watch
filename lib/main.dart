@@ -69,6 +69,7 @@ class _MapScreenState extends State<MapScreen> {
   late Interpreter _interpreter;
   late SosNotificationHandler _sosNotificationHandler;
   bool isModelLoaded = false;
+  List<Map<String, dynamic>> forecastList = [];
 
   Map<String, dynamic> buoyData = {
     "AngleX": 0,
@@ -87,7 +88,6 @@ class _MapScreenState extends State<MapScreen> {
     _isInfoWindowOpenNotifier.dispose();
     _scrollController.dispose();
     _timer?.cancel();
-
     super.dispose();
   }
 
@@ -96,6 +96,7 @@ class _MapScreenState extends State<MapScreen> {
     super.initState();
     WidgetsBinding.instance
         .addPostFrameCallback((_) => centerScrollToCurrentHour());
+    _listenToWeatherDataChanges();
     _startHourlyUpdateTimer();
     _fetchBuoyData();
     _fetchInitialCameraPosition();
@@ -108,7 +109,6 @@ class _MapScreenState extends State<MapScreen> {
     });
     _sosNotificationHandler = SosNotificationHandler(context);
     centerScrollToCurrentHour();
-    _listenToWeatherDataChanges();
   }
 
   Future<void> loadModel() async {
@@ -124,6 +124,8 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<Map<String, dynamic>> predictWeather(List<List<double>> data) async {
+    print("Entered predictWeather function.");
+
     if (!isModelLoaded) {
       print("Model not loaded yet. Returning empty predictions.");
       return {
@@ -131,13 +133,15 @@ class _MapScreenState extends State<MapScreen> {
         'integers': [],
       };
     }
+
+    print("Model is loaded, proceeding with predictions.");
     try {
       // Prepare initial input
       List<double> inputList = data.expand((e) => e).toList();
       Float32List input = Float32List.fromList(inputList);
 
       // Ensure input is non-null and correct length
-      if (input == null || input.isEmpty) {
+      if (input.isEmpty) {
         throw Exception("Invalid input data: Input is null or empty.");
       }
 
@@ -156,10 +160,12 @@ class _MapScreenState extends State<MapScreen> {
         print("Input to model: $input");
 
         // Run inference
-        _interpreter.run(input, outputBuffer);
-
-        // Debugging prints to check the state after running the model
-        print("Model output buffer for hour $i: $outputBuffer");
+        try {
+          _interpreter.run(input, outputBuffer);
+          print("Model output buffer for hour $i: $outputBuffer");
+        } catch (e) {
+          print("Error during model run for hour $i: $e");
+        }
 
         // Log the float prediction
         double prediction = outputBuffer[0][0];
@@ -176,7 +182,14 @@ class _MapScreenState extends State<MapScreen> {
             24; // Increment the hour and wrap around at 24 hours
         inputList = data.expand((e) => e).toList();
         input = Float32List.fromList(inputList);
+
+        // Additional logging
+        print("Updated input list for next iteration: $inputList");
       }
+
+      // Final results
+      print("Final float predictions: $floatPredictions");
+      print("Final integer predictions: $integerPredictions");
 
       return {
         'floats': floatPredictions,
@@ -195,78 +208,101 @@ class _MapScreenState extends State<MapScreen> {
       {bool useMockData = false}) {
     List<Map<String, dynamic>> mockData = [
       {
-        'Temperature': 29.0,
-        'Dewpoint_temperature': 23.7,
-        'Pressure': 3021.0,
-        'Humidity': 73.13,
+        'Temperature': 30.0,
+        'Dewpoint_temperature': 26.0,
+        'Pressure': 100.9,
+        'Humidity': 79.0,
         'Hour': 14,
-        'Day_of_week': 3,
+        'Day': 3,
         'Month': 7,
       },
-
       // Add more mock data as needed
     ];
 
     List<Map<String, dynamic>> inputData = useMockData ? mockData : data;
     print("Input data: $inputData");
 
-    return inputData
-        .map((e) => [
-              e['Temperature'] as double,
-              e['Dewpoint_temperature'] as double,
-              e['Pressure'] as double,
-              e['Humidity'] as double,
-              (e['Hour'] as int).toDouble(),
-              (e['Day_of_week'] as int).toDouble(),
-              (e['Month'] as int).toDouble(),
-            ])
-        .toList();
+    return inputData.map((e) {
+      return [
+        e['Temperature'] as double,
+        e['DewPoint'] as double,
+        e['Pressure'] as double,
+        e['Humidity'] as double,
+        (e['Hour'] as int).toDouble(),
+        (e['Day'] as int).toDouble(),
+        (e['Month'] as int).toDouble(),
+      ];
+    }).toList();
   }
 
   void _listenToWeatherDataChanges() {
     print('Listening for weather data changes...');
     FirebaseDatabase.instance.ref().child('WeatherData').onValue.listen(
-        (event) async {
-      Map<String, dynamic>? weatherData =
-          Map<String, dynamic>.from(event.snapshot.value as Map);
+      (event) async {
+        Map<String, dynamic>? weatherData =
+            Map<String, dynamic>.from(event.snapshot.value as Map);
 
-      // Test code: Print the fetched data
-      print('=============================================');
-      print('Weather Data udpated.');
-      print('New Data: $weatherData');
-      print('Temperature: ${weatherData['Temperature']}');
-      print('Humidity: ${weatherData['Humidity']}');
-      print('=============================================');
+        // Test code: Print the fetched data
+        print('=============================================');
+        print('Weather Data updated.');
+        print('New Data: $weatherData');
+        print('Temperature: ${weatherData['Temperature']}');
+        print('Humidity: ${weatherData['Humidity']}');
+        print('=============================================');
 
-      // Use Firebase data for processing
-      List<Map<String, dynamic>> data = [
-        weatherData
-      ]; // Adjust this according to your data structure
-      List<List<double>> inputData = await prepareInputData(data);
+        // Validate the data
+        if (weatherData.containsKey('Temperature') &&
+            weatherData.containsKey('Humidity') &&
+            weatherData.containsKey('DewPoint') &&
+            weatherData.containsKey('Pressure') &&
+            weatherData.containsKey('Hour') &&
+            weatherData.containsKey('Day') &&
+            weatherData.containsKey('Month')) {
+          List<Map<String, dynamic>> data = [weatherData];
 
-      // Print prepared input data for debugging
-      print("Prepared input data: $inputData");
+          List<List<double>> inputData = prepareInputData(data);
 
-      // Ensure input data is not empty before predicting weather
-      if (inputData.isNotEmpty) {
-        Map<String, dynamic> modelOutput = await predictWeather(inputData);
-        print("Model output (floats): ${modelOutput['floats']}");
-        print("Model output (integers): ${modelOutput['integers']}");
-      } else {
-        print("No valid input data available for prediction.");
-      }
-    }, onError: (error) {
-      print("Error getting data: $error");
-    });
+          // Print prepared input data for debugging
+          print("Prepared input data: $inputData");
+
+          // Ensure input data is not empty before predicting weather
+          if (inputData.isNotEmpty) {
+            if (!isModelLoaded) {
+              await loadModel();
+            }
+            Map<String, dynamic> modelOutput = await predictWeather(inputData);
+            print("Model output (floats): ${modelOutput['floats']}");
+            print("Model output (integers): ${modelOutput['integers']}");
+
+            // Generate the forecast list and update the UI
+            List<Map<String, dynamic>> newForecastList =
+                await generateForecastData(context);
+            setState(() {
+              forecastList = newForecastList;
+            });
+          } else {
+            print("No valid input data available for prediction.");
+          }
+        } else {
+          print("Incomplete weather data received: $weatherData");
+        }
+      },
+      onError: (error) {
+        print("Error getting data: $error");
+      },
+    );
   }
 
   Future<List<Map<String, dynamic>>> generateForecastData(
       BuildContext context) async {
+    print("generateForecastData function called");
+
     final currentHour = DateTime.now().hour;
     final List<Map<String, dynamic>> forecastList = [];
 
-    bool useMockData = true;
+    bool useMockData = false;
 
+    // Fetch data from Firebase
     List<Map<String, dynamic>> data = [];
     if (!useMockData) {
       QuerySnapshot snapshot =
@@ -279,132 +315,132 @@ class _MapScreenState extends State<MapScreen> {
     print("Using mock data: $useMockData");
     print("Data: ${useMockData ? "Using mock data" : data}");
 
-    Future<List<List<double>>> inputData =
+    // Prepare input data for the model
+    List<List<double>> inputData =
         prepareInputData(data, useMockData: useMockData);
 
-    print("Input data: $inputData");
+    print("Prepared input data: $inputData");
 
+    // Load the model if not already loaded
     if (!isModelLoaded) {
       await loadModel();
     }
 
-    if (inputData.isNotEmpty) {
-      Map<String, dynamic> modelOutput = await predictWeather(inputData);
+    print("Calling predictWeather.");
+
+    // Error handling and debug statements around predictWeather call
+    Map<String, dynamic> modelOutput;
+    try {
+      modelOutput = await predictWeather(inputData);
       print("Model output (floats): ${modelOutput['floats']}");
       print("Model output (integers): ${modelOutput['integers']}");
-
-      final conditions = {
-        1: "Clear",
-        2: "Fair",
-        3: "Cloudy",
-        4: "Overcast",
-        5: "Fog",
-        6: "Freezing Fog",
-        7: "Light Rain",
-        8: "Rain",
-        9: "Heavy Rain",
-        10: "Freezing Rain",
-        11: "Heavy Freezing Rain",
-        12: "Sleet",
-        13: "Heavy Sleet",
-        14: "Rain Shower",
-        15: "Heavy Rain Shower",
-        16: "Sleet Shower",
-        17: "Heavy Sleet Shower",
-        18: "Lightning",
-        19: "Hail",
-        20: "Thunderstorm",
-        21: "Heavy Thunderstorm",
-        22: "Storm"
-      };
-
-      final dayIcons = {
-        1: Icons.wb_sunny,
-        2: Icons.wb_sunny_outlined,
-        3: Icons.wb_cloudy,
-        4: Icons.filter_drama,
-        5: Icons.blur_on,
-        6: Icons.ac_unit,
-        7: Icons.grain,
-        8: Icons.invert_colors,
-        9: Icons.invert_colors_off,
-        10: Icons.ac_unit,
-        11: Icons.ac_unit,
-        12: Icons.grain,
-        13: Icons.grain,
-        14: Icons.shower,
-        15: Icons.shower,
-        16: Icons.shower,
-        17: Icons.shower,
-        18: Icons.flash_on,
-        19: Icons.ac_unit,
-        20: Icons.bolt,
-        21: Icons.bolt,
-        22: Icons.storm
-      };
-
-      final nightIcons = {
-        1: Icons.nights_stay,
-        2: Icons.brightness_2,
-        3: Icons.cloud,
-        4: Icons.cloud,
-        5: Icons.blur_on,
-        6: Icons.ac_unit,
-        7: Icons.grain,
-        8: Icons.invert_colors,
-        9: Icons.invert_colors_off,
-        10: Icons.ac_unit,
-        11: Icons.ac_unit,
-        12: Icons.grain,
-        13: Icons.grain,
-        14: Icons.shower,
-        15: Icons.shower,
-        16: Icons.shower,
-        17: Icons.shower,
-        18: Icons.flash_on,
-        19: Icons.ac_unit,
-        20: Icons.bolt,
-        21: Icons.bolt,
-        22: Icons.storm
-      };
-
-      List<Map<String, dynamic>> forecastData = [];
-
-      for (int i = 0; i < 6; i++) {
-        for (int i = 0; i < 6; i++) {
-          final forecastHour = (currentHour + i) % 24;
-          final isDaytime = forecastHour >= 6 && forecastHour <= 18;
-
-          // Convert model output from float to int
-          int weatherCode = modelOutput['integers'][i];
-
-          // Retrieve the condition and icon
-          final condition = conditions[weatherCode] ?? "Unknown";
-          final icon =
-              isDaytime ? dayIcons[weatherCode] : nightIcons[weatherCode];
-
-          forecastList.add({
-            "time": TimeOfDay(hour: forecastHour, minute: 0).format(context),
-            "hour": forecastHour,
-            "condition": conditions[weatherCode],
-            "icon": isDaytime ? dayIcons[weatherCode] : nightIcons[weatherCode]
-          });
-
-          // Debugging print for each forecast item
-          print('=============================================');
-          print('Forecast Hour: $forecastHour');
-          print('Condition: ${conditions[weatherCode]}');
-          print(
-              'Icon: ${isDaytime ? dayIcons[weatherCode] : nightIcons[weatherCode]}');
-          print('=============================================');
-        }
-      }
-
-      print('=============================================');
-      print("Forecast List: $forecastList");
-      print('=============================================');
-      return forecastList;
+    } catch (e) {
+      print("Error during model prediction: $e");
+      return forecastList; // Return empty list on error
     }
+
+    // Map model output to forecast data
+    final conditions = {
+      1: "Clear",
+      2: "Fair",
+      3: "Cloudy",
+      4: "Overcast",
+      5: "Fog",
+      6: "Freezing Fog",
+      7: "Light Rain",
+      8: "Rain",
+      9: "Heavy Rain",
+      10: "Freezing Rain",
+      11: "Heavy Freezing Rain",
+      12: "Sleet",
+      13: "Heavy Sleet",
+      14: "Rain Shower",
+      15: "Heavy Rain Shower",
+      16: "Sleet Shower",
+      17: "Heavy Sleet Shower",
+      18: "Lightning",
+      19: "Hail",
+      20: "Thunderstorm",
+      21: "Heavy Thunderstorm",
+      22: "Storm"
+    };
+
+    final dayIcons = {
+      1: Icons.wb_sunny,
+      2: Icons.wb_sunny_outlined,
+      3: Icons.wb_cloudy,
+      4: Icons.filter_drama,
+      5: Icons.blur_on,
+      6: Icons.ac_unit,
+      7: Icons.grain,
+      8: Icons.invert_colors,
+      9: Icons.invert_colors_off,
+      10: Icons.ac_unit,
+      11: Icons.ac_unit,
+      12: Icons.grain,
+      13: Icons.grain,
+      14: Icons.shower,
+      15: Icons.shower,
+      16: Icons.shower,
+      17: Icons.shower,
+      18: Icons.flash_on,
+      19: Icons.ac_unit,
+      20: Icons.bolt,
+      21: Icons.bolt,
+      22: Icons.storm
+    };
+
+    final nightIcons = {
+      1: Icons.nights_stay,
+      2: Icons.brightness_2,
+      3: Icons.cloud,
+      4: Icons.cloud,
+      5: Icons.blur_on,
+      6: Icons.ac_unit,
+      7: Icons.grain,
+      8: Icons.invert_colors,
+      9: Icons.invert_colors_off,
+      10: Icons.ac_unit,
+      11: Icons.ac_unit,
+      12: Icons.grain,
+      13: Icons.grain,
+      14: Icons.shower,
+      15: Icons.shower,
+      16: Icons.shower,
+      17: Icons.shower,
+      18: Icons.flash_on,
+      19: Icons.ac_unit,
+      20: Icons.bolt,
+      21: Icons.bolt,
+      22: Icons.storm
+    };
+
+    for (int i = 0; i < 6; i++) {
+      final forecastHour = (currentHour + i) % 24;
+      final isDaytime = forecastHour >= 6 && forecastHour <= 18;
+
+      // Convert model output from float to int
+      int weatherCode = modelOutput['integers'][i];
+
+      // Retrieve the condition and icon
+      final condition = conditions[weatherCode] ?? "Unknown";
+      final icon = isDaytime ? dayIcons[weatherCode] : nightIcons[weatherCode];
+      const defaultIcon = Icons.help;
+
+      forecastList.add({
+        "time": TimeOfDay(hour: forecastHour, minute: 0).format(context),
+        "hour": forecastHour,
+        "condition": condition,
+        "icon": icon ?? defaultIcon,
+      });
+    }
+
+    print('=============================================');
+    print("Forecast List: $forecastList");
+    print('=============================================');
+
+    return forecastList;
+  }
 
   void centerScrollToCurrentHour() async {
     final forecastData = await generateForecastData(context);
@@ -848,64 +884,56 @@ class _MapScreenState extends State<MapScreen> {
                           builder: (context, snapshot) {
                             if (snapshot.connectionState ==
                                 ConnectionState.waiting) {
-                              // Create a placeholder that mimics the size and layout of actual content
                               return SingleChildScrollView(
                                 scrollDirection: Axis.horizontal,
                                 child: Row(
                                   children: List.generate(
-                                      6,
-                                      (index) => Container(
-                                            width:
-                                                100, // Set the width as required
-                                            margin: const EdgeInsets.only(
-                                                right: 16.0),
-                                            padding: const EdgeInsets.all(8.0),
-                                            decoration: BoxDecoration(
-                                              color: Colors.grey[
-                                                  300], // Placeholder color
-                                              borderRadius:
-                                                  BorderRadius.circular(16),
-                                            ),
-                                            child: Column(
-                                              children: [
-                                                Container(
-                                                  width: 40,
-                                                  height: 40,
-                                                  color: Colors.grey[
-                                                      400], // Placeholder for the icon
-                                                ),
-                                                const SizedBox(height: 8),
-                                                Container(
-                                                  width: 50,
-                                                  height: 10,
-                                                  color: Colors.grey[
-                                                      400], // Placeholder for the time
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Container(
-                                                  width: 30,
-                                                  height: 10,
-                                                  color: Colors.grey[
-                                                      400], // Placeholder for the temperature
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Container(
-                                                  width: 50,
-                                                  height: 10,
-                                                  color: Colors.grey[
-                                                      400], // Placeholder for the condition
-                                                ),
-                                              ],
-                                            ),
-                                          )),
+                                    6,
+                                    (index) => Container(
+                                      width: 100,
+                                      margin:
+                                          const EdgeInsets.only(right: 16.0),
+                                      padding: const EdgeInsets.all(8.0),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[300],
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          Container(
+                                            width: 40,
+                                            height: 40,
+                                            color: Colors.grey[400],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Container(
+                                            width: 50,
+                                            height: 10,
+                                            color: Colors.grey[400],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Container(
+                                            width: 30,
+                                            height: 10,
+                                            color: Colors.grey[400],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Container(
+                                            width: 50,
+                                            height: 10,
+                                            color: Colors.grey[400],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               );
                             }
                             if (!snapshot.hasData) {
                               return const Text('No data available');
                             }
-                            final forecastList =
-                                snapshot.data!; // Use forecastList directly
+                            final forecastList = snapshot.data!;
                             final currentHour = DateTime.now().hour;
                             return SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
@@ -914,6 +942,8 @@ class _MapScreenState extends State<MapScreen> {
                                 children: forecastList.map((data) {
                                   final isCurrentHour =
                                       data['hour'] == currentHour;
+                                  final icon = data['icon']
+                                      as IconData; // Cast to IconData
                                   return Container(
                                     margin: const EdgeInsets.only(right: 16.0),
                                     padding: const EdgeInsets.all(8.0),
@@ -926,7 +956,7 @@ class _MapScreenState extends State<MapScreen> {
                                     child: Column(
                                       children: [
                                         Icon(
-                                          data['icon'] as IconData,
+                                          icon,
                                           color: isCurrentHour
                                               ? Colors.white
                                               : Colors.black,
