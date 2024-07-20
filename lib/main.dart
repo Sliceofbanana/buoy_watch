@@ -49,12 +49,7 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  static const _defaultCameraPosition = CameraPosition(
-    target: LatLng(11.083018, 123.931450), // Default position if Firebase fails
-    zoom: 16.5,
-  );
-
-  late CameraPosition _initialCameraPosition = _defaultCameraPosition;
+  late CameraPosition _initialCameraPosition;
   late GoogleMapController _googleMapController;
   final PanelController _panelController = PanelController();
   final ValueNotifier<double> _fabPositionNotifier =
@@ -282,7 +277,7 @@ class _MapScreenState extends State<MapScreen> {
       BuildContext context) async {
     print("generateForecastData function called");
 
-    final bool useMockData = true; // Set to true or false as needed
+    const bool useMockData = false; // Set to true or false as needed
     final currentHour = DateTime.now().hour;
     final List<Map<String, dynamic>> forecastList = [];
 
@@ -533,15 +528,8 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  void _moveCameraToPosition(LatLng position) {
-    _googleMapController.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(target: position, zoom: 16.5),
-      ),
-    );
-  }
-
   Future<void> _fetchInitialCameraPosition() async {
+    print('Inside _fetchInitialCameraPosition...');
     LatLng initialPosition = await _getInitialCameraPosition();
     setState(() {
       _initialCameraPosition = CameraPosition(
@@ -555,25 +543,44 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<LatLng> _getInitialCameraPosition() async {
-    try {
-      final DatabaseReference positionRef =
-          FirebaseDatabase.instance.ref().child('BuoyData');
-      final DataSnapshot snapshot = await positionRef.get();
-      if (snapshot.exists) {
-        final data = snapshot.value as Map<dynamic, dynamic>;
-        final double latitude = data['latitude'];
-        final double longitude = data['longitude'];
-        print(
-            'Fetched data from Firebase: latitude=$latitude, longitude=$longitude');
-        return LatLng(latitude, longitude);
-      } else {
-        print('No data exists in Firebase. Using default position.');
-        return _defaultCameraPosition.target;
+    final DatabaseReference positionRef =
+        FirebaseDatabase.instance.ref().child('BuoyData');
+
+    final Completer<LatLng> completer = Completer();
+
+    positionRef.onValue.listen((event) {
+      final data = event.snapshot.value as Map<dynamic, dynamic>;
+      final double latitude = data['latitude']?.toDouble() ?? 0.0;
+      final double longitude = data['longitude']?.toDouble() ?? 0.0;
+      print(
+          'Fetched data from Firebase: latitude=$latitude, longitude=$longitude');
+
+      LatLng newPosition = LatLng(latitude, longitude);
+
+      if (!completer.isCompleted) {
+        completer.complete(newPosition);
       }
-    } catch (e) {
-      print('Error fetching data from Firebase: $e');
-      return _defaultCameraPosition.target;
-    }
+
+      setState(() {
+        _initialCameraPosition = CameraPosition(
+          target: newPosition,
+          zoom: 16.5,
+        );
+        _moveCameraToPosition(newPosition);
+        _createCustomMarker(newPosition);
+      });
+    });
+
+    return completer.future;
+  }
+
+  void _moveCameraToPosition(LatLng position) {
+    print('Moving camera to position: $position');
+    _googleMapController.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: position, zoom: 16.5),
+      ),
+    );
   }
 
   void _startBuoyUpdateListener() {
