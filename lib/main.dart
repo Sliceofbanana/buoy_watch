@@ -108,6 +108,7 @@ class _MapScreenState extends State<MapScreen> {
     });
     _sosNotificationHandler = SosNotificationHandler(context);
     centerScrollToCurrentHour();
+    _listenToWeatherDataChanges();
   }
 
   Future<void> loadModel() async {
@@ -222,6 +223,43 @@ class _MapScreenState extends State<MapScreen> {
         .toList();
   }
 
+  void _listenToWeatherDataChanges() {
+    print('Listening for weather data changes...');
+    FirebaseDatabase.instance.ref().child('WeatherData').onValue.listen(
+        (event) async {
+      Map<String, dynamic>? weatherData =
+          Map<String, dynamic>.from(event.snapshot.value as Map);
+
+      // Test code: Print the fetched data
+      print('=============================================');
+      print('Weather Data udpated.');
+      print('New Data: $weatherData');
+      print('Temperature: ${weatherData['Temperature']}');
+      print('Humidity: ${weatherData['Humidity']}');
+      print('=============================================');
+
+      // Use Firebase data for processing
+      List<Map<String, dynamic>> data = [
+        weatherData
+      ]; // Adjust this according to your data structure
+      List<List<double>> inputData = await prepareInputData(data);
+
+      // Print prepared input data for debugging
+      print("Prepared input data: $inputData");
+
+      // Ensure input data is not empty before predicting weather
+      if (inputData.isNotEmpty) {
+        Map<String, dynamic> modelOutput = await predictWeather(inputData);
+        print("Model output (floats): ${modelOutput['floats']}");
+        print("Model output (integers): ${modelOutput['integers']}");
+      } else {
+        print("No valid input data available for prediction.");
+      }
+    }, onError: (error) {
+      print("Error getting data: $error");
+    });
+  }
+
   Future<List<Map<String, dynamic>>> generateForecastData(
       BuildContext context) async {
     final currentHour = DateTime.now().hour;
@@ -241,7 +279,7 @@ class _MapScreenState extends State<MapScreen> {
     print("Using mock data: $useMockData");
     print("Data: ${useMockData ? "Using mock data" : data}");
 
-    List<List<double>> inputData =
+    Future<List<List<double>>> inputData =
         prepareInputData(data, useMockData: useMockData);
 
     print("Input data: $inputData");
@@ -250,108 +288,123 @@ class _MapScreenState extends State<MapScreen> {
       await loadModel();
     }
 
-    Map<String, dynamic> modelOutput = await predictWeather(inputData);
+    if (inputData.isNotEmpty) {
+      Map<String, dynamic> modelOutput = await predictWeather(inputData);
+      print("Model output (floats): ${modelOutput['floats']}");
+      print("Model output (integers): ${modelOutput['integers']}");
 
-    print("Model output (floats): ${modelOutput['floats']}");
-    print("Model output (integers): ${modelOutput['integers']}");
-    final conditions = {
-      1: "Clear",
-      2: "Fair",
-      3: "Cloudy",
-      4: "Overcast",
-      5: "Fog",
-      6: "Freezing Fog",
-      7: "Light Rain",
-      8: "Rain",
-      9: "Heavy Rain",
-      10: "Freezing Rain",
-      11: "Heavy Freezing Rain",
-      12: "Sleet",
-      13: "Heavy Sleet",
-      14: "Rain Shower",
-      15: "Heavy Rain Shower",
-      16: "Sleet Shower",
-      17: "Heavy Sleet Shower",
-      18: "Lightning",
-      19: "Hail",
-      20: "Thunderstorm",
-      21: "Heavy Thunderstorm",
-      22: "Storm"
-    };
+      final conditions = {
+        1: "Clear",
+        2: "Fair",
+        3: "Cloudy",
+        4: "Overcast",
+        5: "Fog",
+        6: "Freezing Fog",
+        7: "Light Rain",
+        8: "Rain",
+        9: "Heavy Rain",
+        10: "Freezing Rain",
+        11: "Heavy Freezing Rain",
+        12: "Sleet",
+        13: "Heavy Sleet",
+        14: "Rain Shower",
+        15: "Heavy Rain Shower",
+        16: "Sleet Shower",
+        17: "Heavy Sleet Shower",
+        18: "Lightning",
+        19: "Hail",
+        20: "Thunderstorm",
+        21: "Heavy Thunderstorm",
+        22: "Storm"
+      };
 
-    final dayIcons = {
-      1: Icons.wb_sunny,
-      2: Icons.wb_sunny_outlined,
-      3: Icons.wb_cloudy,
-      4: Icons.filter_drama,
-      5: Icons.blur_on,
-      6: Icons.ac_unit,
-      7: Icons.grain,
-      8: Icons.invert_colors,
-      9: Icons.invert_colors_off,
-      10: Icons.ac_unit,
-      11: Icons.ac_unit,
-      12: Icons.grain,
-      13: Icons.grain,
-      14: Icons.shower,
-      15: Icons.shower,
-      16: Icons.shower,
-      17: Icons.shower,
-      18: Icons.flash_on,
-      19: Icons.ac_unit,
-      20: Icons.bolt,
-      21: Icons.bolt,
-      22: Icons.storm
-    };
+      final dayIcons = {
+        1: Icons.wb_sunny,
+        2: Icons.wb_sunny_outlined,
+        3: Icons.wb_cloudy,
+        4: Icons.filter_drama,
+        5: Icons.blur_on,
+        6: Icons.ac_unit,
+        7: Icons.grain,
+        8: Icons.invert_colors,
+        9: Icons.invert_colors_off,
+        10: Icons.ac_unit,
+        11: Icons.ac_unit,
+        12: Icons.grain,
+        13: Icons.grain,
+        14: Icons.shower,
+        15: Icons.shower,
+        16: Icons.shower,
+        17: Icons.shower,
+        18: Icons.flash_on,
+        19: Icons.ac_unit,
+        20: Icons.bolt,
+        21: Icons.bolt,
+        22: Icons.storm
+      };
 
-    final nightIcons = {
-      1: Icons.nights_stay,
-      2: Icons.brightness_2,
-      3: Icons.cloud,
-      4: Icons.cloud,
-      5: Icons.blur_on,
-      6: Icons.ac_unit,
-      7: Icons.grain,
-      8: Icons.invert_colors,
-      9: Icons.invert_colors_off,
-      10: Icons.ac_unit,
-      11: Icons.ac_unit,
-      12: Icons.grain,
-      13: Icons.grain,
-      14: Icons.shower,
-      15: Icons.shower,
-      16: Icons.shower,
-      17: Icons.shower,
-      18: Icons.flash_on,
-      19: Icons.ac_unit,
-      20: Icons.bolt,
-      21: Icons.bolt,
-      22: Icons.storm
-    };
+      final nightIcons = {
+        1: Icons.nights_stay,
+        2: Icons.brightness_2,
+        3: Icons.cloud,
+        4: Icons.cloud,
+        5: Icons.blur_on,
+        6: Icons.ac_unit,
+        7: Icons.grain,
+        8: Icons.invert_colors,
+        9: Icons.invert_colors_off,
+        10: Icons.ac_unit,
+        11: Icons.ac_unit,
+        12: Icons.grain,
+        13: Icons.grain,
+        14: Icons.shower,
+        15: Icons.shower,
+        16: Icons.shower,
+        17: Icons.shower,
+        18: Icons.flash_on,
+        19: Icons.ac_unit,
+        20: Icons.bolt,
+        21: Icons.bolt,
+        22: Icons.storm
+      };
 
-    for (int i = 0; i < 6; i++) {
-      final forecastHour = (currentHour + i) % 24;
-      final isDaytime = forecastHour >= 6 && forecastHour <= 18;
+      List<Map<String, dynamic>> forecastData = [];
 
-      // Convert model output from float to int
-      int weatherCode = modelOutput['integers'][i];
+      for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < 6; i++) {
+          final forecastHour = (currentHour + i) % 24;
+          final isDaytime = forecastHour >= 6 && forecastHour <= 18;
 
-      // Retrieve the condition and icon
-      final condition = conditions[weatherCode] ?? "Unknown";
-      final icon = isDaytime ? dayIcons[weatherCode] : nightIcons[weatherCode];
+          // Convert model output from float to int
+          int weatherCode = modelOutput['integers'][i];
 
-      forecastList.add({
-        "time": TimeOfDay(hour: forecastHour, minute: 0).format(context),
-        "hour": forecastHour,
-        "condition": condition,
-        "icon": icon
-      });
+          // Retrieve the condition and icon
+          final condition = conditions[weatherCode] ?? "Unknown";
+          final icon =
+              isDaytime ? dayIcons[weatherCode] : nightIcons[weatherCode];
+
+          forecastList.add({
+            "time": TimeOfDay(hour: forecastHour, minute: 0).format(context),
+            "hour": forecastHour,
+            "condition": conditions[weatherCode],
+            "icon": isDaytime ? dayIcons[weatherCode] : nightIcons[weatherCode]
+          });
+
+          // Debugging print for each forecast item
+          print('=============================================');
+          print('Forecast Hour: $forecastHour');
+          print('Condition: ${conditions[weatherCode]}');
+          print(
+              'Icon: ${isDaytime ? dayIcons[weatherCode] : nightIcons[weatherCode]}');
+          print('=============================================');
+        }
+      }
+
+      print('=============================================');
+      print("Forecast List: $forecastList");
+      print('=============================================');
+      return forecastList;
     }
-    print('=============================================');
-    print("Forecast List: $forecastList");
-    print('=============================================');
-    return forecastList;
-  }
 
   void centerScrollToCurrentHour() async {
     final forecastData = await generateForecastData(context);
