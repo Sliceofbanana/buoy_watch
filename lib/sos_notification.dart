@@ -32,13 +32,8 @@ class SosNotificationHandler {
           print('Status value: $status of type ${status.runtimeType}');
 
           if (status == 1) {
-            print('Status is 1, calling _fetchBuoyDataAndShowNotification');
             _fetchBuoyDataAndShowNotification();
-          } else {
-            print('ButtonStatus is not 1');
           }
-        } else {
-          print('ButtonStatus is not a valid map or does not contain "Status"');
         }
       } else {
         print('No data found');

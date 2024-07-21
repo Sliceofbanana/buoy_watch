@@ -118,103 +118,6 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  Future<Map<String, dynamic>> predictWeather(List<List<double>> data) async {
-    print("Entered predictWeather function.");
-
-    if (!isModelLoaded) {
-      print("Model not loaded yet. Returning empty predictions.");
-      return {
-        'floats': [],
-        'integers': [],
-      };
-    }
-
-    print("Model is loaded, proceeding with predictions.");
-    try {
-      List<double> inputList = data.expand((e) => e).toList();
-      Float32List input = Float32List.fromList(inputList);
-
-      if (input.isEmpty) {
-        throw Exception("Invalid input data: Input is null or empty.");
-      }
-
-      List<double> floatPredictions = [];
-      List<int> integerPredictions = [];
-
-      for (int i = 0; i < 6; i++) {
-        List<List<double>> outputBuffer =
-            List.generate(1, (_) => List.filled(1, 0.0));
-
-        print("Running inference for hour $i");
-        print("Input to model: $input");
-
-        try {
-          _interpreter.run(input, outputBuffer);
-          print("Model output buffer for hour $i: $outputBuffer");
-        } catch (e) {
-          print("Error during model run for hour $i: $e");
-        }
-
-        double prediction = outputBuffer[0][0];
-        print("Model output buffer (floats) for hour $i: $prediction");
-
-        floatPredictions.add(prediction);
-        integerPredictions.add(prediction.round());
-
-        data[0][4] = (data[0][4] + 1) % 24;
-        inputList = data.expand((e) => e).toList();
-        input = Float32List.fromList(inputList);
-
-        print("Updated input list for next iteration: $inputList");
-      }
-
-      print("Final float predictions: $floatPredictions");
-      print("Final integer predictions: $integerPredictions");
-
-      return {
-        'floats': floatPredictions,
-        'integers': integerPredictions,
-      };
-    } catch (e) {
-      print("Error predicting weather: $e");
-      return {
-        'floats': [],
-        'integers': [],
-      };
-    }
-  }
-
-  List<List<double>> prepareInputData(List<Map<String, dynamic>> data,
-      {bool useMockData = false}) {
-    List<Map<String, dynamic>> mockData = [
-      {
-        'Temperature': 30.0,
-        'Dewpoint_temperature': 26.0,
-        'Pressure': 100.9,
-        'Humidity': 79.0,
-        'Hour': 14,
-        'Day': 3,
-        'Month': 7,
-      },
-      // Add more mock data as needed
-    ];
-
-    List<Map<String, dynamic>> inputData = useMockData ? mockData : data;
-    print("Input data: $inputData");
-
-    return inputData.map((e) {
-      return [
-        e['Temperature'] as double,
-        e['Dewpoint_temperature'] as double,
-        e['Pressure'] as double,
-        e['Humidity'] as double,
-        (e['Hour'] as int).toDouble(),
-        (e['Day'] as int).toDouble(),
-        (e['Month'] as int).toDouble(),
-      ];
-    }).toList();
-  }
-
   void _listenToWeatherDataChanges() {
     print('Listening for weather data changes...');
     FirebaseDatabase.instance.ref().child('WeatherData').onValue.listen(
@@ -273,6 +176,92 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  Future<Map<String, dynamic>> predictWeather(List<List<double>> data) async {
+    print("Entered predictWeather function.");
+    if (!isModelLoaded) {
+      print("Model not loaded yet. Returning empty predictions.");
+      return {
+        'floats': [],
+        'integers': [],
+      };
+    }
+    print("Model is loaded, proceeding with predictions.");
+    try {
+      List<double> inputList = data.expand((e) => e).toList();
+      Float32List input = Float32List.fromList(inputList);
+      if (input.isEmpty) {
+        throw Exception("Invalid input data: Input is null or empty.");
+      }
+      List<double> floatPredictions = [];
+      List<int> integerPredictions = [];
+      for (int i = 0; i < 6; i++) {
+        List<List<double>> outputBuffer =
+            List.generate(1, (_) => List.filled(1, 0.0));
+        print("Running inference for hour $i");
+        print("Input to model: $input");
+        try {
+          _interpreter.run(input, outputBuffer);
+          print("Model output buffer for hour $i: $outputBuffer");
+        } catch (e) {
+          print("Error during model run for hour $i: $e");
+          continue; // Skip this iteration on error
+        }
+        double prediction = outputBuffer[0][0];
+        print("Model output buffer (floats) for hour $i: $prediction");
+        floatPredictions.add(prediction);
+        integerPredictions.add(prediction.round());
+        data[0][4] =
+            (data[0][4] + 1) % 24; // Update the hour for the next iteration
+        inputList = data.expand((e) => e).toList();
+        input = Float32List.fromList(inputList);
+        print("Updated input list for next iteration: $inputList");
+      }
+      print("Final float predictions: $floatPredictions");
+      print("Final integer predictions: $integerPredictions");
+      return {
+        'floats': floatPredictions,
+        'integers': integerPredictions,
+      };
+    } catch (e) {
+      print("Error predicting weather: $e");
+      return {
+        'floats': [],
+        'integers': [],
+      };
+    }
+  }
+
+  List<List<double>> prepareInputData(List<Map<String, dynamic>> data,
+      {bool useMockData = false}) {
+    List<Map<String, dynamic>> mockData = [
+      {
+        'Temperature': 30.0,
+        'Dewpoint_temperature': 26.0,
+        'Pressure': 100.9,
+        'Humidity': 79.0,
+        'Hour': 14,
+        'Day': 3,
+        'Month': 7,
+      },
+      // Add more mock data as needed
+    ];
+
+    List<Map<String, dynamic>> inputData = useMockData ? mockData : data;
+    print("Input data: $inputData");
+
+    return inputData.map((e) {
+      return [
+        e['Temperature'] as double,
+        e['Dewpoint_temperature'] as double,
+        e['Pressure'] as double,
+        e['Humidity'] as double,
+        (e['Hour'] as int).toDouble(),
+        (e['Day'] as int).toDouble(),
+        (e['Month'] as int).toDouble(),
+      ];
+    }).toList();
+  }
+
   Future<List<Map<String, dynamic>>> generateForecastData(
       BuildContext context) async {
     print("generateForecastData function called");
@@ -288,6 +277,8 @@ class _MapScreenState extends State<MapScreen> {
       data = snapshot.docs
           .map((doc) => doc.data() as Map<String, dynamic>)
           .toList();
+      print(
+          "Fetched data from Firebase: $data"); // Add this line to verify data
     }
 
     print("Using mock data: $useMockData");
@@ -295,11 +286,11 @@ class _MapScreenState extends State<MapScreen> {
 
     List<List<double>> inputData =
         prepareInputData(data, useMockData: useMockData);
-
     print("Prepared input data: $inputData");
 
     if (!isModelLoaded) {
       await loadModel();
+      print("Model loaded successfully."); // Ensure model is loaded
     }
 
     print("Calling predictWeather.");
@@ -387,6 +378,8 @@ class _MapScreenState extends State<MapScreen> {
       final isDaytime = forecastHour >= 6 && forecastHour <= 18;
 
       int weatherCode = modelOutput['integers'][i];
+      print(
+          "Weather code for hour $forecastHour: $weatherCode"); // Debug weather code
 
       final condition = conditions[weatherCode] ?? "Unknown";
       final IconData icon =
