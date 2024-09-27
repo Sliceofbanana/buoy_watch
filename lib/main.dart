@@ -97,7 +97,6 @@ class _MapScreenState extends State<MapScreen> {
     _fetchInitialCameraPosition();
     _startBuoyUpdateListener();
     loadModel().then((_) {
-      // After loading the model, you can now safely call prediction functions.
       if (isModelLoaded) {
         generateForecastData(context);
       }
@@ -125,7 +124,6 @@ class _MapScreenState extends State<MapScreen> {
         Map<String, dynamic>? weatherData =
             Map<String, dynamic>.from(event.snapshot.value as Map);
 
-        // Test code: Print the fetched data
         print('=============================================');
         print('Weather Data updated.');
         print('New Data: $weatherData');
@@ -133,7 +131,6 @@ class _MapScreenState extends State<MapScreen> {
         print('Humidity: ${weatherData['Humidity']}');
         print('=============================================');
 
-        // Validate the data
         if (weatherData.containsKey('Temperature') &&
             weatherData.containsKey('Humidity') &&
             weatherData.containsKey('DewPoint') &&
@@ -144,11 +141,8 @@ class _MapScreenState extends State<MapScreen> {
           List<Map<String, dynamic>> data = [weatherData];
 
           List<List<double>> inputData = prepareInputData(data);
-
-          // Print prepared input data for debugging
           print("Prepared input data: $inputData");
 
-          // Ensure input data is not empty before predicting weather
           if (inputData.isNotEmpty) {
             if (!isModelLoaded) {
               await loadModel();
@@ -156,8 +150,7 @@ class _MapScreenState extends State<MapScreen> {
             Map<String, dynamic> modelOutput = await predictWeather(inputData);
             print("Model output (floats): ${modelOutput['floats']}");
             print("Model output (integers): ${modelOutput['integers']}");
-
-            // Generate the forecast list and update the UI
+              
             List<Map<String, dynamic>> newForecastList =
                 await generateForecastData(context);
             setState(() {
@@ -204,14 +197,14 @@ class _MapScreenState extends State<MapScreen> {
           print("Model output buffer for hour $i: $outputBuffer");
         } catch (e) {
           print("Error during model run for hour $i: $e");
-          continue; // Skip this iteration on error
+          continue;
         }
         double prediction = outputBuffer[0][0];
         print("Model output buffer (floats) for hour $i: $prediction");
         floatPredictions.add(prediction);
         integerPredictions.add(prediction.round());
         data[0][4] =
-            (data[0][4] + 1) % 24; // Update the hour for the next iteration
+            (data[0][4] + 1) % 24;
         inputList = data.expand((e) => e).toList();
         input = Float32List.fromList(inputList);
         print("Updated input list for next iteration: $inputList");
@@ -243,7 +236,6 @@ class _MapScreenState extends State<MapScreen> {
         'Day': 3,
         'Month': 7,
       },
-      // Add more mock data as needed
     ];
 
     List<Map<String, dynamic>> inputData = useMockData ? mockData : data;
@@ -266,7 +258,7 @@ class _MapScreenState extends State<MapScreen> {
       BuildContext context) async {
     print("generateForecastData function called");
 
-    const bool useMockData = false; // Set to true or false as needed
+    const bool useMockData = false;
     final currentHour = DateTime.now().hour;
     final List<Map<String, dynamic>> forecastList = [];
 
@@ -278,7 +270,7 @@ class _MapScreenState extends State<MapScreen> {
           .map((doc) => doc.data() as Map<String, dynamic>)
           .toList();
       print(
-          "Fetched data from Firebase: $data"); // Add this line to verify data
+          "Fetched data from Firebase: $data");
     }
 
     print("Using mock data: $useMockData");
@@ -290,7 +282,7 @@ class _MapScreenState extends State<MapScreen> {
 
     if (!isModelLoaded) {
       await loadModel();
-      print("Model loaded successfully."); // Ensure model is loaded
+      print("Model loaded successfully."); 
     }
 
     print("Calling predictWeather.");
@@ -379,7 +371,7 @@ class _MapScreenState extends State<MapScreen> {
 
       int weatherCode = modelOutput['integers'][i];
       print(
-          "Weather code for hour $forecastHour: $weatherCode"); // Debug weather code
+          "Weather code for hour $forecastHour: $weatherCode");
 
       final condition = conditions[weatherCode] ?? "Unknown";
       final IconData icon =
@@ -448,12 +440,8 @@ class _MapScreenState extends State<MapScreen> {
     final now = DateTime.now();
     final nextHour = DateTime(now.year, now.month, now.day, now.hour + 1);
     final initialDelay = nextHour.difference(now);
-
-    // Set a one-time timer to fire at the start of the next hour
     Timer(initialDelay, () {
       setState(() {});
-
-      // Set up a periodic timer to fire at the start of every subsequent hour
       _timer = Timer.periodic(const Duration(hours: 1), (timer) {
         setState(() {});
       });
@@ -530,7 +518,6 @@ class _MapScreenState extends State<MapScreen> {
         zoom: 16.5,
       );
       print('Camera position updated to: $_initialCameraPosition');
-      // Create the initial custom marker
       _createCustomMarker(initialPosition);
     });
   }
@@ -608,7 +595,7 @@ class _MapScreenState extends State<MapScreen> {
           padding: EdgeInsets.zero,
           children: <Widget>[
             SizedBox(
-              height: 123, // Adjust the height here
+              height: 123,
               child: DrawerHeader(
                 decoration: BoxDecoration(
                   color: Colors.red[700],
@@ -632,7 +619,7 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ),
               onTap: () {
-                Navigator.pop(context); // Close the drawer
+                Navigator.pop(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -665,7 +652,6 @@ class _MapScreenState extends State<MapScreen> {
         children: [
           GestureDetector(
             onPanUpdate: (details) {
-              // Check if the panel is closed or not
               if (!_isPanelOpenNotifier.value) {
                 _googleMapController.moveCamera(CameraUpdate.scrollBy(
                   -details.delta.dx,
@@ -676,8 +662,8 @@ class _MapScreenState extends State<MapScreen> {
           ),
           GoogleMap(
             myLocationButtonEnabled: false,
-            zoomControlsEnabled: false, // Disable zoom controls
-            zoomGesturesEnabled: true, // Enable zoom gestures
+            zoomControlsEnabled: false,
+            zoomGesturesEnabled: true,
             initialCameraPosition: _initialCameraPosition,
             onMapCreated: (controller) => _googleMapController = controller,
             markers: _markers,
@@ -688,7 +674,7 @@ class _MapScreenState extends State<MapScreen> {
               controller: controller,
               database: FirebaseDatabase.instance,
               forecastData: Future.value([]),
-              buoyData: const {}, // Pass FirebaseDatabase instance here
+              buoyData: const {}, 
             ),
             backdropEnabled: true,
             backdropColor: Colors.transparent,
@@ -763,43 +749,43 @@ class _MapScreenState extends State<MapScreen> {
                           ),
                         ),
                         const SizedBox(
-                            height: 8.0), // Space between title and first data
+                            height: 8.0),
                         Align(
                           alignment: Alignment.center,
                           child: Text('X-axis: ${buoyData["AngleX"]}'),
                         ),
                         const SizedBox(
-                            height: 8.0), // Space between X-axis and Y-axis
+                            height: 8.0),
                         Align(
                           alignment: Alignment.center,
                           child: Text('Y-axis: ${buoyData["AngleY"]}'),
                         ),
                         const SizedBox(
-                            height: 8.0), // Space between Y-axis and Altitude
+                            height: 8.0),
                         Align(
                           alignment: Alignment.center,
                           child: Text('Altitude: ${buoyData["altitude"]}'),
                         ),
                         const SizedBox(
-                            height: 8.0), // Space between Altitude and Latitude
+                            height: 8.0),
                         Align(
                           alignment: Alignment.center,
                           child: Text('Latitude: ${buoyData["latitude"]}'),
                         ),
                         const SizedBox(
                             height:
-                                8.0), // Space between Latitude and Longitude
+                                8.0),
                         Align(
                           alignment: Alignment.center,
                           child: Text('Longitude: ${buoyData["longitude"]}'),
                         ),
                         const SizedBox(
-                            height: 8.0), // Space between Longitude and Status
+                            height: 8.0),
                         Align(
                           alignment: Alignment.center,
                           child: Text('Status: ${buoyData["status"]}'),
                         ),
-                        const SizedBox(height: 16.0), // Space before the button
+                        const SizedBox(height: 16.0),
                         Center(
                           child: ElevatedButton(
                             onPressed: () {
@@ -919,7 +905,7 @@ class _MapScreenState extends State<MapScreen> {
                                   final isCurrentHour =
                                       data['hour'] == currentHour;
                                   final icon = data['icon']
-                                      as IconData; // Cast to IconData
+                                      as IconData;
                                   return Container(
                                     margin: const EdgeInsets.only(right: 16.0),
                                     padding: const EdgeInsets.all(8.0),
@@ -990,7 +976,7 @@ class _MapScreenState extends State<MapScreen> {
                             CameraUpdate.newCameraPosition(
                               CameraPosition(
                                 target: newPosition,
-                                zoom: 16.5, // Reset zoom level to 16.5
+                                zoom: 16.5,
                               ),
                             ),
                           );
